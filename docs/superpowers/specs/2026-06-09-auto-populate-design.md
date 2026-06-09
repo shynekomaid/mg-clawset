@@ -125,3 +125,19 @@ UI layer untested (matches repo status quo).
 - Fill-around-existing-furniture mode
 - Custom user weights / sliders
 - Mobile UI (room designer hidden on mobile already)
+
+## Addendum (2026-06-09): Algorithm choice
+
+User feedback: greedy first-fit leaves too many holes. Added user-selectable
+algorithm next to the preset dropdown:
+
+- **Quick** (`greedy`) — original deterministic greedy first-fit.
+- **Maximize** (`maximize`, default) — multi-start randomized greedy (jittered
+  ordering, random scan directions) plus ruin-and-recreate local search
+  (remove ~30% incl. anchor cascades, refill), under a ~400ms time budget.
+  Keeps the highest-scoring layout (ties: more cells filled). Never worse than
+  greedy (greedy run is the baseline candidate). Seeded RNG + fixed iteration
+  count give reproducible results in tests; UI uses time-based budget, so each
+  click can re-roll a different layout.
+
+Measured in app: same pool filled 92/112 cells (Quick) vs 108/112 (Maximize).
