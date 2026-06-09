@@ -9,7 +9,7 @@ import RoomDesignerWorkspace from './components/RoomDesignerWorkspace';
 import SaveImportModal from './components/SaveImportModal';
 import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/anchorHelpers';
 import { autoPopulateRoom } from './utils/autoPopulate';
-import type { PresetKey } from './utils/autoPopulate';
+import type { PresetKey, AlgorithmKey } from './utils/autoPopulate';
 import useIsMobile from './hooks/useIsMobile';
 
 function countSpaces(shape: number[][]): number {
@@ -243,7 +243,7 @@ function App() {
     });
   }, [updateActiveRoom, activeRoom]);
 
-  const handleAutoPopulate = useCallback((preset: PresetKey) => {
+  const handleAutoPopulate = useCallback((preset: PresetKey, algorithm: AlgorithmKey) => {
     const usedInOtherRooms: Record<string, number> = {};
     rooms.forEach((room, i) => {
       if (i === activeRoom) return;
@@ -253,6 +253,7 @@ function App() {
     });
     const result = autoPopulateRoom({
       preset,
+      algorithm,
       roomIndex: activeRoom,
       allFurniture,
       ownership,

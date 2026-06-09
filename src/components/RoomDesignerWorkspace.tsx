@@ -5,8 +5,8 @@ import RoomGrid from './RoomGrid';
 import RoomStatsSummary from './RoomStatsSummary';
 import { getRoomLabel } from '../types/furniture';
 import { captureRoom, captureHouse } from '../utils/roomCapture';
-import { PRESETS } from '../utils/autoPopulate';
-import type { PresetKey } from '../utils/autoPopulate';
+import { PRESETS, ALGORITHMS } from '../utils/autoPopulate';
+import type { PresetKey, AlgorithmKey } from '../utils/autoPopulate';
 
 const LEGEND: { type: number; color: string; border: string; label: string }[] = [
   { type: 2, color: 'var(--lavender-grey)', border: 'rgba(132,143,165,0.5)', label: 'Solid' },
@@ -31,7 +31,7 @@ interface Props {
   onRemove: (instanceId: string) => void;
   onMove: (instanceId: string, row: number, col: number) => void;
   onImportRooms: (entries: RoomExportEntry[][]) => void;
-  onAutoPopulate: (preset: PresetKey) => void;
+  onAutoPopulate: (preset: PresetKey, algorithm: AlgorithmKey) => void;
   ownership: Record<string, number>;
 }
 
@@ -41,6 +41,7 @@ export default function RoomDesignerWorkspace({
 }: Props) {
   const [expertView, setExpertView] = useState(false);
   const [preset, setPreset] = useState<PresetKey>('breeding');
+  const [algorithm, setAlgorithm] = useState<AlgorithmKey>('maximize');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAutoFill = () => {
@@ -50,7 +51,7 @@ export default function RoomDesignerWorkspace({
     ) {
       return;
     }
-    onAutoPopulate(preset);
+    onAutoPopulate(preset, algorithm);
   };
 
   const containerStyle: CSSProperties = {
@@ -181,6 +182,16 @@ export default function RoomDesignerWorkspace({
           >
             {(Object.keys(PRESETS) as PresetKey[]).map((key) => (
               <option key={key} value={key}>{PRESETS[key].label}</option>
+            ))}
+          </select>
+          <select
+            value={algorithm}
+            onChange={(e) => setAlgorithm(e.target.value as AlgorithmKey)}
+            style={{ ...smallBtn, padding: '5px 8px' }}
+            title={ALGORITHMS[algorithm].description}
+          >
+            {(Object.keys(ALGORITHMS) as AlgorithmKey[]).map((key) => (
+              <option key={key} value={key} title={ALGORITHMS[key].description}>{ALGORITHMS[key].label}</option>
             ))}
           </select>
           <button style={smallBtn} onClick={handleAutoFill} title="Automatically fill this room with owned furniture">
