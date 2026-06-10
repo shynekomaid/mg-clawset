@@ -27,10 +27,12 @@ const loadBtn: CSSProperties = {
 interface Props {
   onLoadSavegame: () => void;
   hasOwnership: boolean;
+  savefileName: string | null;
+  reloading: boolean;
 }
 
 /** Persistent top bar: mascot (help), title, always-reachable savegame import. */
-export default function AppHeader({ onLoadSavegame, hasOwnership }: Props) {
+export default function AppHeader({ onLoadSavegame, hasOwnership, savefileName, reloading }: Props) {
   return (
     <div style={bar}>
       {/* CatMascot renders the inline cat + click-to-open help overlay */}
@@ -46,8 +48,13 @@ export default function AppHeader({ onLoadSavegame, hasOwnership }: Props) {
         </span>
       </div>
       <div style={{ flex: 1 }} />
-      <button style={loadBtn} onClick={onLoadSavegame} title="Import owned furniture from your Mewgenics save file">
-        📂 {hasOwnership ? 'Re-load savegame' : 'Load savegame'}
+      <button
+        style={{ ...loadBtn, opacity: reloading ? 0.6 : 1 }}
+        onClick={onLoadSavegame}
+        disabled={reloading}
+        title={savefileName ? `Re-reads ${savefileName} from disk` : 'Import owned furniture from your Mewgenics save file'}
+      >
+        📂 {reloading ? 'Reloading…' : hasOwnership || savefileName ? 'Re-load savegame' : 'Load savegame'}
       </button>
     </div>
   );

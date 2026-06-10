@@ -187,3 +187,17 @@ side panel; welcome modal was a text wall with buried actions.
 - "Focus" mode removed — closing the drawer is the same thing.
 - Mobile keeps the original browser-only experience (designer needs
   drag-and-drop); the one-time welcome modal still auto-opens there.
+
+## Addendum (2026-06-10, #3): Remembered savefile (one-click re-sync)
+
+- Savefile parsing extracted to `src/utils/savegame.ts` (shared by modal and
+  silent reload).
+- `src/utils/savefileHandle.ts`: stores the FileSystemFileHandle from
+  `showOpenFilePicker` in IndexedDB (`mg-clawset/file-handles`). Chromium
+  only; Firefox/Safari keep the classic file input.
+- Modal file selection uses the FSA picker when available and reports the
+  handle up; App persists it and shows the filename in the header tooltip.
+- Header "Re-load savegame": queries/requests read permission on the stored
+  handle, re-reads the file from disk, re-imports ownership — one click.
+  Any failure (no handle, permission denied, file moved) falls back to the
+  import dialog.

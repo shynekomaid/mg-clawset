@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import initSqlJs from 'sql.js';
-import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { parseSavegame } from '../utils/savegame';
+import { isFilePickerSupported } from '../utils/savefileHandle';
 
 const overlay: CSSProperties = {
   position: 'fixed',
@@ -99,30 +99,16 @@ const statusText: CSSProperties = {
   minHeight: 18,
 };
 
-function parseFurnitureBlob(uint8Array: Uint8Array): { furniture_name: string; quality: number } {
-  const view = new DataView(uint8Array.buffer, uint8Array.byteOffset, uint8Array.byteLength);
-  const decoder = new TextDecoder('utf-8');
-  let off = 0;
-  off += 4; // field1
-  const name_len = view.getInt32(off, true);
-  off += 4;
-  off += 4; // padding
-  const nameBytes = uint8Array.slice(off, off + name_len);
-  const furniture_name = decoder.decode(nameBytes);
-  off += name_len;
-  // Quality/rarity field sits right after the name string (0 = normal, 2 = rare)
-  const quality = view.getInt32(off, true);
-  return { furniture_name, quality };
-}
-
 interface Props {
   open: boolean;
   onClose: () => void;
   onImport: (ownership: Record<string, number>) => void;
   furnitureIdMap: Map<string, string>; // lowercase name -> id
+  /** Called when the file was picked via the File System Access API (Chromium) so the handle can be remembered. */
+  onHandleCaptured?: (handle: FileSystemFileHandle) => void;
 }
 
-export default function SaveImportModal({ open, onClose, onImport, furnitureIdMap }: Props) {
+export default function SaveImportModal({ open, onClose, onImport, furnitureIdMap, onHandleCaptured }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -141,58 +127,10 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
 
-      setStatus('Initializing database parser...');
-      const SQL = await initSqlJs({
-        locateFile: () => sqlWasmUrl,
-      });
-
-      const db = new SQL.Database(uint8Array);
-
       setStatus('Parsing furniture data...');
-      const stmt = db.prepare('SELECT key, data FROM furniture');
-      const itemCounts: { name: string; quality: number }[] = [];
+      const { ownership: newOwnership, matched, unmatchedNames } = await parseSavegame(uint8Array, furnitureIdMap);
 
-      while (stmt.step()) {
-        const row = stmt.getAsObject();
-        const blobData = row.data as Uint8Array;
-        try {
-          const parsed = parseFurnitureBlob(blobData);
-          itemCounts.push({ name: parsed.furniture_name, quality: parsed.quality });
-        } catch {
-          // skip unparseable rows
-        }
-      }
-      stmt.free();
-      db.close();
-
-      // Aggregate counts per resolved name (base name or rare variant)
-      const nameCounts: Record<string, number> = {};
-      for (const { name, quality } of itemCounts) {
-        // quality 0 = normal, 2 = rare
-        const resolvedName = quality >= 2 ? `${name}_(Rare)` : name;
-        nameCounts[resolvedName] = (nameCounts[resolvedName] || 0) + 1;
-      }
-
-      // Map save file names to app IDs
-      const newOwnership: Record<string, number> = {};
-      let matched = 0;
-      const unmatchedNames: string[] = [];
-
-      for (const [name, count] of Object.entries(nameCounts)) {
-        const id = furnitureIdMap.get(name.toLowerCase());
-        if (id) {
-          newOwnership[id] = (newOwnership[id] || 0) + count;
-          matched++;
-        } else {
-          unmatchedNames.push(name);
-        }
-      }
-
-      console.log('[SaveImport] Parsed items from save:', itemCounts.length, '| Unique names:', Object.keys(nameCounts).length);
-      console.log('[SaveImport] Rare items found:', itemCounts.filter(i => i.quality > 1).length);
-      console.log('[SaveImport] Sample map keys:', [...furnitureIdMap.keys()].slice(0, 10));
       console.log('[SaveImport] Matched:', matched, 'Unmatched:', unmatchedNames);
-      console.log('[SaveImport] New ownership:', newOwnership);
 
       setStatus(`Found ${matched} furniture types (${unmatchedNames.length} unmatched). Importing...`);
       onImport(newOwnership);
@@ -247,7 +185,23 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
 
         <label
           style={fileLabel}
-          onClick={() => fileRef.current?.click()}
+          onClick={async () => {
+            if (isFilePickerSupported()) {
+              try {
+                const [handle] = await window.showOpenFilePicker!({
+                  types: [{ description: 'Mewgenics save', accept: { 'application/octet-stream': ['.sav', '.db', '.sqlite'] } }],
+                });
+                setFile(await handle.getFile());
+                setError('');
+                setStatus('');
+                onHandleCaptured?.(handle);
+                return;
+              } catch {
+                return; // user cancelled the picker
+              }
+            }
+            fileRef.current?.click();
+          }}
         >
           {file ? `📁 ${file.name}` : 'Click to select .sav file'}
         </label>

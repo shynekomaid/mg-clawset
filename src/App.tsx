@@ -13,6 +13,8 @@ import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/ancho
 import { autoPopulateRoom } from './utils/autoPopulate';
 import type { AlgorithmKey } from './utils/autoPopulate';
 import useIsMobile from './hooks/useIsMobile';
+import { parseSavegame } from './utils/savegame';
+import { saveSavefileHandle, loadSavefileHandle, readRememberedSavefile } from './utils/savefileHandle';
 
 function countSpaces(shape: number[][]): number {
   let count = 0;
@@ -162,6 +164,13 @@ function App() {
   const [activeRoom, setActiveRoom] = useState(ATTIC_INDEX);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [statsPerSpace, setStatsPerSpace] = useState(false);
+  const [savefileName, setSavefileName] = useState<string | null>(null);
+  const [reloading, setReloading] = useState(false);
+
+  // Surface the remembered savefile (if any) in the header
+  useEffect(() => {
+    loadSavefileHandle().then((h) => { if (h) setSavefileName(h.name); });
+  }, []);
 
   const placed = rooms[activeRoom];
 
@@ -304,6 +313,31 @@ function App() {
     setImportModalOpen(true);
   }, [dismissHero]);
 
+  const handleSavefileHandleCaptured = useCallback((handle: FileSystemFileHandle) => {
+    setSavefileName(handle.name);
+    saveSavefileHandle(handle).catch(() => { /* remembering is best-effort */ });
+  }, []);
+
+  // One-click re-import from the remembered file; falls back to the dialog
+  const handleLoadSavegame = useCallback(async () => {
+    dismissHero();
+    setReloading(true);
+    try {
+      const remembered = await readRememberedSavefile();
+      if (remembered) {
+        const { ownership: newOwnership } = await parseSavegame(remembered.data, furnitureIdMap);
+        if (Object.keys(newOwnership).length > 0) {
+          handleImportOwnership(newOwnership);
+          return;
+        }
+      }
+    } catch { /* fall through to the dialog */ }
+    finally {
+      setReloading(false);
+    }
+    setImportModalOpen(true);
+  }, [dismissHero, handleImportOwnership]);
+
   const handleImportRooms = useCallback((allEntries: { id: string; row: number; col: number }[][]) => {
     const furnitureById = new Map(allFurniture.map(f => [f.id, f]));
     const newRooms: PlacedFurniture[][] = allEntries.map(entries => {
@@ -441,7 +475,12 @@ function App() {
         <WelcomeHero onLoadSavegame={openImportModal} onBrowse={dismissHero} />
       )}
       {!isMobile && (
-        <AppHeader onLoadSavegame={openImportModal} hasOwnership={hasOwnership} />
+        <AppHeader
+          onLoadSavegame={handleLoadSavegame}
+          hasOwnership={hasOwnership}
+          savefileName={savefileName}
+          reloading={reloading}
+        />
       )}
       <div style={{ flex: 1, minHeight: 0 }}>
       <SplitScreenContainer>
@@ -499,6 +538,7 @@ function App() {
         onClose={() => setImportModalOpen(false)}
         onImport={handleImportOwnership}
         furnitureIdMap={furnitureIdMap}
+        onHandleCaptured={handleSavefileHandleCaptured}
       />
     </div>
   );
