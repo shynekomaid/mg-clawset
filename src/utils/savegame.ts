@@ -70,7 +70,14 @@ function parseHouseUnlocks(blob: Uint8Array): HouseInfo | null {
     const entries: string[] = [];
     for (let i = 0; i < count; i++) entries.push(readStr());
     const atticUnlocked = entries.some((e) => e.toLowerCase().includes('attic'));
-    const regularRooms = Math.min(4, Math.max(1, entries.filter((e) => !e.toLowerCase().includes('attic')).length));
+    // "Default" = the base room. Plain house-size upgrades ("MediumHouse")
+    // add no room by themselves; only suffixed entries do
+    // ("MediumHouse_SmallRoom"). Attic suffixes are tracked separately.
+    const roomAdditions = entries.filter((e) => {
+      const m = e.match(/_([A-Za-z0-9]+)$/);
+      return m !== null && !m[1].toLowerCase().includes('attic');
+    }).length;
+    const regularRooms = Math.min(4, Math.max(1, 1 + roomAdditions));
     return { atticUnlocked, regularRooms };
   } catch {
     return null;
