@@ -420,9 +420,9 @@ function App() {
     try {
       const remembered = await readRememberedSavefile();
       if (remembered) {
-        const { ownership: newOwnership, houseInfo: hi } = await parseSavegame(remembered.data, furnitureIdMap);
+        const { ownership: newOwnership, houseInfo: hi, placements } = await parseSavegame(remembered.data, furnitureIdMap);
         if (Object.keys(newOwnership).length > 0) {
-          handleImportOwnership(newOwnership, hi);
+          handleImportOwnership(newOwnership, hi, placements);
           return;
         }
       }

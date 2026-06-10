@@ -96,7 +96,6 @@ export default function RoomDesignerWorkspace({
   const [algorithm, setAlgorithm] = useState<AlgorithmKey>('maximize');
   const [selectedIdols, setSelectedIdols] = useState<Set<string>>(() => new Set());
   const [checklistOpen, setChecklistOpen] = useState(false);
-  const [labelsOn, setLabelsOn] = useState(false);
   const [hoverItem, setHoverItem] = useState<string | null>(null);
   const [connectorLines, setConnectorLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -133,7 +132,7 @@ export default function RoomDesignerWorkspace({
       setConnectorLines(lines);
     });
     return () => cancelAnimationFrame(id);
-  }, [hoverItem, checklistOpen, placed, labelsOn]);
+  }, [hoverItem, checklistOpen, placed]);
 
   // Legend numbers: alphabetical unique items of the active room (matches checklist order)
   const labelNumbers = useMemo(() => {
@@ -144,6 +143,12 @@ export default function RoomDesignerWorkspace({
     ids.forEach((id, i) => { map[id] = i + 1; });
     return map;
   }, [placed]);
+
+  // Hovering a placed item needs the checklist as its legend
+  const handleHoverItem = (id: string | null) => {
+    setHoverItem(id);
+    if (id && !checklistOpen) setChecklistOpen(true);
+  };
 
   const applyPreset = (key: FillPresetKey) => {
     const preset = FILL_PRESETS[key];
@@ -342,18 +347,6 @@ export default function RoomDesignerWorkspace({
             ✨ Auto-fill {autoFillOpen ? '\u25b4' : '\u25be'}
           </button>
           <button
-            style={{ ...smallBtn, ...(labelsOn ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
-            onClick={() => {
-              setLabelsOn((v) => {
-                if (!v) setChecklistOpen(true); // numbers need their legend
-                return !v;
-              });
-            }}
-            title="Show numbered labels on placed items; the checklist is the legend"
-          >
-            Labels
-          </button>
-          <button
             style={{ ...smallBtn, ...(checklistOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
             onClick={() => setChecklistOpen((v) => !v)}
             title="Tick off this room's items while placing them in the game"
@@ -525,9 +518,9 @@ export default function RoomDesignerWorkspace({
               onMove={onMove}
               expertView={expertView}
               roomIndex={activeRoom}
-              labelNumbers={labelsOn ? labelNumbers : null}
+              labelNumbers={labelNumbers}
               hoverItemId={hoverItem}
-              onHoverItem={setHoverItem}
+              onHoverItem={handleHoverItem}
             />
           )}
         </div>
@@ -535,9 +528,9 @@ export default function RoomDesignerWorkspace({
           <RoomChecklist
             placed={placed}
             roomIndex={activeRoom}
-            numbers={labelsOn ? labelNumbers : null}
+            numbers={labelNumbers}
             hoverItemId={hoverItem}
-            onHoverItem={setHoverItem}
+            onHoverItem={handleHoverItem}
           />
         )}
         {connectorLines.length > 0 && (

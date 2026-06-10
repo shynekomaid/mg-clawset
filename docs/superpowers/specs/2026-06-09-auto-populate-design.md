@@ -304,3 +304,15 @@ converts bottom-left coords to shape-origin cells via visual bounds.
   `weights: StatWeights` with negative weights supported.
 - "Include food storage" option force-places all owned Food Box copies
   (`mustInclude` now places every owned copy, not one).
+
+## Addendum (2026-06-10, #9): House fit, permanent labels, reload parity
+
+- House view scales to the window (aspect-ratio boxes per room, flex rows;
+  no scrolling). Clicking a room remains the way to zoom into detail.
+- Numbered item labels are always on; the Labels toggle is gone.
+- Hovering any placed item auto-opens the checklist (it is the legend for
+  the numbers and the hover highlight).
+- One-click "Re-load savegame" now imports room layouts as well, matching
+  the dialog's behavior — reload mirrors the full game state. Partial
+  imports (e.g. keep generated layouts, refresh counts only) remain
+  available through the import dialog's checkboxes.

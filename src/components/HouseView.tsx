@@ -21,6 +21,9 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect }: {
     position: 'relative',
     flex: 1,
     minWidth: 0,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
     border: `1px solid ${unlocked ? 'var(--border)' : 'transparent'}`,
     borderRadius: 10,
     padding: 8,
@@ -41,11 +44,21 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect }: {
           {unlocked ? `${placed.length} item${placed.length !== 1 ? 's' : ''}` : '🔒 locked'}
         </span>
       </div>
-      <div style={{ position: 'relative' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{
+        position: 'relative',
+        aspectRatio: `${cfg.cols} / ${cfg.rows}`,
+        maxWidth: '100%',
+        maxHeight: '100%',
+        width: '100%',
+      }}>
         <div style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${cfg.cols}, 1fr)`,
+          gridTemplateRows: `repeat(${cfg.rows}, 1fr)`,
           gap: 1,
+          width: '100%',
+          height: '100%',
         }}>
           {Array.from({ length: cfg.rows }, (_, r) =>
             Array.from({ length: cfg.cols }, (_, c) => {
@@ -54,7 +67,6 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect }: {
                 <div
                   key={`${r}-${c}`}
                   style={{
-                    aspectRatio: '1',
                     borderRadius: 1,
                     background: valid ? 'var(--code-bg)' : 'transparent',
                     border: valid ? '1px solid var(--border)' : 'none',
@@ -103,6 +115,7 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect }: {
           );
         })}
       </div>
+      </div>
     </div>
   );
 }
@@ -123,13 +136,15 @@ export default function HouseView({ rooms, isRoomUnlocked, onSelectRoom }: Props
   );
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflowY: 'auto', minHeight: 0, paddingRight: 4 }}>
-      {mini(ATTIC_INDEX)}
-      <div style={{ display: 'flex', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
+      <div style={{ flex: '1.1 1 0%', minHeight: 0, display: 'flex' }}>
+        {mini(ATTIC_INDEX)}
+      </div>
+      <div style={{ display: 'flex', gap: 10, flex: '1 1 0%', minHeight: 0 }}>
         {mini(3)}
         {mini(2)}
       </div>
-      <div style={{ display: 'flex', gap: 10 }}>
+      <div style={{ display: 'flex', gap: 10, flex: '1 1 0%', minHeight: 0 }}>
         {mini(0)}
         {mini(1)}
       </div>
