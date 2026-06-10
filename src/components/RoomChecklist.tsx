@@ -22,6 +22,8 @@ interface Entry {
 interface Props {
   placed: PlacedFurniture[];
   roomIndex: number;
+  /** itemId -> legend number shown when labels are on. */
+  numbers?: Record<string, number> | null;
 }
 
 /**
@@ -29,7 +31,7 @@ interface Props {
  * while placing the items in the actual game. Checked state is persisted
  * per room + item in localStorage.
  */
-export default function RoomChecklist({ placed, roomIndex }: Props) {
+export default function RoomChecklist({ placed, roomIndex, numbers }: Props) {
   const [checked, setChecked] = useState<Record<string, boolean>>(loadChecked);
 
   const entries: Entry[] = useMemo(() => {
@@ -99,6 +101,11 @@ export default function RoomChecklist({ placed, roomIndex }: Props) {
                     checked={isChecked}
                     onChange={() => toggle(e.item.id)}
                   />
+                  {numbers?.[e.item.id] && (
+                    <span style={{ background: 'rgba(0,0,0,0.7)', color: '#fff', borderRadius: 4, fontSize: 10, fontWeight: 700, padding: '0 5px', lineHeight: '15px', flexShrink: 0 }}>
+                      {numbers[e.item.id]}
+                    </span>
+                  )}
                   <FurnitureImage src={e.item.image_url} alt={e.item.name} compact />
                   <span style={{ flex: 1, minWidth: 0 }}>
                     {e.count > 1 ? `${e.count}× ` : ''}{e.item.name}

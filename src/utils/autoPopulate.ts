@@ -41,12 +41,15 @@ export interface AutoPopulateOptions {
   seed?: number;
   /** Exact number of 'maximize' search rounds; overrides budgetMs. Seed + iterations = fully deterministic. */
   iterations?: number;
+  /** Item ids that must be placed (once each, if owned) regardless of their score — e.g. idols with special effects. */
+  mustInclude?: string[];
 }
 
 interface Candidate {
   item: FurnitureItem;
   score: number;
   remaining: number;
+  mandatory: boolean;
 }
 
 type Rng = () => number;
@@ -67,14 +70,17 @@ interface ScanMode {
 }
 
 function buildCandidates(opts: AutoPopulateOptions): Candidate[] {
-  const { stats, allFurniture, ownership, usedInOtherRooms } = opts;
+  const { stats, allFurniture, ownership, usedInOtherRooms, mustInclude } = opts;
+  const mandatoryIds = new Set(mustInclude ?? []);
   const candidates: Candidate[] = [];
   for (const item of allFurniture) {
     const remaining = (ownership[item.id] ?? 0) - (usedInOtherRooms[item.id] ?? 0);
     if (remaining <= 0) continue;
+    const mandatory = mandatoryIds.has(item.id);
     const score = statScore(item, stats);
-    if (score <= 0) continue;
-    candidates.push({ item, score, remaining });
+    if (score <= 0 && !mandatory) continue;
+    // Mandatory items are placed once; extra owned copies compete normally only if they score
+    candidates.push({ item, score, remaining: mandatory ? 1 : remaining, mandatory });
   }
   return candidates;
 }
@@ -87,7 +93,8 @@ function sortCandidates(candidates: Candidate[], rng?: Rng): void {
   }
   const key = (c: Candidate) => (c.score / c.item.spacesOccupied) * (jitter.get(c.item.id) ?? 1);
   candidates.sort((a, b) =>
-    key(b) - key(a)
+    Number(b.mandatory) - Number(a.mandatory)
+    || key(b) - key(a)
     || b.score - a.score
     || a.item.name.localeCompare(b.item.name),
   );

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import type { FurnitureItem, PlacedFurniture } from '../types/furniture';
 import RoomGrid from './RoomGrid';
@@ -35,17 +35,19 @@ interface Props {
   onRemove: (instanceId: string) => void;
   onMove: (instanceId: string, row: number, col: number) => void;
   onImportRooms: (entries: RoomExportEntry[][]) => void;
-  onAutoPopulate: (stats: StatKey[], algorithm: AlgorithmKey) => void;
+  onAutoPopulate: (stats: StatKey[], algorithm: AlgorithmKey, idolIds: string[]) => void;
   ownership: Record<string, number>;
   drawerOpen: boolean;
   onToggleDrawer: () => void;
   isRoomUnlocked: (i: number) => boolean;
+  /** Owned special idols selectable for forced placement. */
+  idols: FurnitureItem[];
 }
 
 export default function RoomDesignerWorkspace({
   visible, placed, rooms, activeRoom, onActiveRoomChange,
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
-  drawerOpen, onToggleDrawer, isRoomUnlocked,
+  drawerOpen, onToggleDrawer, isRoomUnlocked, idols,
 }: Props) {
   const [expertView, setExpertView] = useState(false);
   const [autoFillOpen, setAutoFillOpen] = useState(false);
@@ -53,14 +55,35 @@ export default function RoomDesignerWorkspace({
     () => new Set<StatKey>(['comfort', 'stimulation']),
   );
   const [algorithm, setAlgorithm] = useState<AlgorithmKey>('maximize');
+  const [selectedIdols, setSelectedIdols] = useState<Set<string>>(() => new Set());
   const [checklistOpen, setChecklistOpen] = useState(false);
+  const [labelsOn, setLabelsOn] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Legend numbers: alphabetical unique items of the active room (matches checklist order)
+  const labelNumbers = useMemo(() => {
+    const ids = [...new Map(placed.map((p) => [p.item.id, p.item.name])).entries()]
+      .sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([id]) => id);
+    const map: Record<string, number> = {};
+    ids.forEach((id, i) => { map[id] = i + 1; });
+    return map;
+  }, [placed]);
 
   const toggleStat = (stat: StatKey) => {
     setSelectedStats((prev) => {
       const next = new Set(prev);
       if (next.has(stat)) next.delete(stat);
       else next.add(stat);
+      return next;
+    });
+  };
+
+  const toggleIdol = (id: string) => {
+    setSelectedIdols((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -75,7 +98,17 @@ export default function RoomDesignerWorkspace({
       return;
     }
     setAutoFillOpen(false);
-    onAutoPopulate(stats, algorithm);
+    const idolIds = activeRoom === HOUSE_VIEW ? [] : idols.filter((i) => selectedIdols.has(i.id)).map((i) => i.id);
+    onAutoPopulate(stats, algorithm, idolIds);
+  };
+
+  const IDOL_NOTES: Record<string, string> = {
+    suppressoridol: 'Cats will NOT breed in this room',
+    fightidol: 'Fights are deadlier; winner gets double stat rewards',
+  };
+  const idolNote = (item: FurnitureItem): string => {
+    const key = Object.keys(IDOL_NOTES).find((k) => item.image_url.includes(k));
+    return key ? IDOL_NOTES[key] : 'Stat idol';
   };
 
   const containerStyle: CSSProperties = {
@@ -214,6 +247,18 @@ export default function RoomDesignerWorkspace({
             ✨ Auto-fill {autoFillOpen ? '\u25b4' : '\u25be'}
           </button>
           <button
+            style={{ ...smallBtn, ...(labelsOn ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
+            onClick={() => {
+              setLabelsOn((v) => {
+                if (!v) setChecklistOpen(true); // numbers need their legend
+                return !v;
+              });
+            }}
+            title="Show numbered labels on placed items; the checklist is the legend"
+          >
+            Labels
+          </button>
+          <button
             style={{ ...smallBtn, ...(checklistOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
             onClick={() => setChecklistOpen((v) => !v)}
             title="Tick off this room's items while placing them in the game"
@@ -279,6 +324,31 @@ export default function RoomDesignerWorkspace({
                     </label>
                   ))}
                 </div>
+                {idols.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)', marginTop: 2 }}>
+                      Idols (always placed)
+                    </div>
+                    {activeRoom === HOUSE_VIEW ? (
+                      <div style={{ fontSize: 11, color: 'var(--text-m)' }}>
+                        Open a single room to force idols into it.
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {idols.map((idol) => (
+                          <label key={idol.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }} title={idolNote(idol)}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIdols.has(idol.id)}
+                              onChange={() => toggleIdol(idol.id)}
+                            />
+                            {idol.name}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
                 <button
                   style={{
                     ...smallBtn,
@@ -309,10 +379,11 @@ export default function RoomDesignerWorkspace({
               onMove={onMove}
               expertView={expertView}
               roomIndex={activeRoom}
+              labelNumbers={labelsOn ? labelNumbers : null}
             />
           )}
         </div>
-        {checklistOpen && <RoomChecklist placed={placed} roomIndex={activeRoom} />}
+        {checklistOpen && <RoomChecklist placed={placed} roomIndex={activeRoom} numbers={labelsOn ? labelNumbers : null} />}
       </div>
       {expertView && (
         <div style={legendStyle}>

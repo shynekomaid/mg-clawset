@@ -224,6 +224,32 @@ describe('autoPopulateRoom', () => {
     }
   });
 
+  it('mustInclude forces items in even with non-positive score', () => {
+    const chaosIdol = makeItem({ name: 'Idol of Chaos', comfort: -5, shape: [[2], [2]] });
+    const sofa = makeItem({ name: 'sofa', comfort: 3, shape: [[2]] });
+    const result = autoPopulateRoom(makeOpts({
+      allFurniture: [chaosIdol, sofa],
+      ownership: { 'Idol of Chaos': 1, sofa: 5 },
+      mustInclude: ['Idol of Chaos'],
+    }));
+    expect(result.filter(p => p.item.name === 'Idol of Chaos')).toHaveLength(1);
+    expect(result.filter(p => p.item.name === 'sofa')).toHaveLength(5);
+  });
+
+  it('mustInclude survives maximize ruin-and-recreate', () => {
+    const idol = makeItem({ name: 'idol', comfort: -5, shape: [[2]] });
+    const block = makeItem({ name: 'block', comfort: 2, shape: [[2, 2]] });
+    const result = autoPopulateRoom(makeOpts({
+      allFurniture: [idol, block],
+      ownership: { idol: 1, block: 100 },
+      mustInclude: ['idol'],
+      algorithm: 'maximize',
+      seed: 5,
+      iterations: 15,
+    }));
+    expect(result.filter(p => p.item.name === 'idol')).toHaveLength(1);
+  });
+
   it('places anchored items only when anchor support exists', () => {
     // anchor (4) on top must sit on an anchor point (3); attic has no ceiling anchors
     const hanging = makeItem({ name: 'hanging', comfort: 10, shape: [[4], [2]] });

@@ -66,6 +66,10 @@ for (const item of allFurniture) {
 }
 
 const HERO_SEEN_KEY = 'mg-clawset-hero-seen';
+
+// Special idols (wiki: "Special Furniture") — unique effects beyond raw stats
+const IDOL_RE = /special_\w*(idol)/i;
+const idolItems = allFurniture.filter((it) => IDOL_RE.test(it.image_url));
 const HOUSE_UNLOCKS_KEY = 'mg-clawset-house-unlocks';
 
 function loadHouseInfo(): HouseInfo | null {
@@ -278,7 +282,12 @@ function App() {
     });
   }, [updateActiveRoom, activeRoom]);
 
-  const handleAutoPopulate = useCallback((stats: StatKey[], algorithm: AlgorithmKey) => {
+  const ownedIdols = useMemo(
+    () => idolItems.filter((it) => (ownership[it.id] || 0) > 0),
+    [ownership],
+  );
+
+  const handleAutoPopulate = useCallback((stats: StatKey[], algorithm: AlgorithmKey, idolIds: string[] = []) => {
     const makeInstanceId = () => `placed-${nextInstanceId++}`;
 
     if (activeRoom === HOUSE_VIEW) {
@@ -328,6 +337,7 @@ function App() {
       ownership,
       usedInOtherRooms,
       makeInstanceId,
+      mustInclude: idolIds,
     });
     if (result.length === 0) {
       window.alert('Nothing to place: no owned furniture with remaining copies scores positively for the selected stats.');
@@ -353,10 +363,12 @@ function App() {
     setOwnership((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   }, []);
 
-  const handleImportOwnership = useCallback((newOwnership: Record<string, number>, newHouseInfo: HouseInfo | null = null) => {
-    setOwnership(newOwnership);
-    // After loading a savegame, show what the player actually owns
-    setFilters((prev) => ({ ...prev, onlyOwned: true }));
+  const handleImportOwnership = useCallback((newOwnership: Record<string, number> | null, newHouseInfo: HouseInfo | null = null) => {
+    if (newOwnership) {
+      setOwnership(newOwnership);
+      // After loading a savegame, show what the player actually owns
+      setFilters((prev) => ({ ...prev, onlyOwned: true }));
+    }
     if (newHouseInfo) {
       setHouseInfo(newHouseInfo);
       localStorage.setItem(HOUSE_UNLOCKS_KEY, JSON.stringify(newHouseInfo));
@@ -555,6 +567,7 @@ function App() {
             drawerOpen={drawerOpen}
             onToggleDrawer={() => setDrawerOpen((v) => !v)}
             isRoomUnlocked={isRoomUnlocked}
+            idols={ownedIdols}
           />
         )}
         <div

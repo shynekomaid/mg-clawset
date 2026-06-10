@@ -102,7 +102,7 @@ const statusText: CSSProperties = {
 interface Props {
   open: boolean;
   onClose: () => void;
-  onImport: (ownership: Record<string, number>, houseInfo: HouseInfo | null) => void;
+  onImport: (ownership: Record<string, number> | null, houseInfo: HouseInfo | null) => void;
   furnitureIdMap: Map<string, string>; // lowercase name -> id
   /** Called when the file was picked via the File System Access API (Chromium) so the handle can be remembered. */
   onHandleCaptured?: (handle: FileSystemFileHandle) => void;
@@ -110,6 +110,8 @@ interface Props {
 
 export default function SaveImportModal({ open, onClose, onImport, furnitureIdMap, onHandleCaptured }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [importItems, setImportItems] = useState(true);
+  const [importUnlocks, setImportUnlocks] = useState(true);
   const [status, setStatus] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -133,7 +135,7 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
       console.log('[SaveImport] Matched:', matched, 'Unmatched:', unmatchedNames, 'House:', houseInfo);
 
       setStatus(`Found ${matched} furniture types (${unmatchedNames.length} unmatched). Importing...`);
-      onImport(newOwnership, houseInfo);
+      onImport(importItems ? newOwnership : null, importUnlocks ? houseInfo : null);
 
       setTimeout(() => {
         setStatus('');
@@ -165,6 +167,21 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
         <p style={paragraph}>
           Look for files with the <strong>.sav</strong> extension in the saves folder.
         </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13, color: 'var(--text)', margin: '8px 0' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={importItems} onChange={(e) => setImportItems(e.target.checked)} />
+            Owned furniture counts
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={importUnlocks} onChange={(e) => setImportUnlocks(e.target.checked)} />
+            Unlocked rooms
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5, cursor: 'not-allowed' }} title="The save stores placements with ids we cannot map to items yet">
+            <input type="checkbox" disabled />
+            Current room layouts <span style={{ fontSize: 11 }}>(save format not fully decoded yet)</span>
+          </label>
+        </div>
 
         <div style={warningBox}>
           ⚠ This will overwrite your current inventory data. Any manually added counts will be replaced.
@@ -243,7 +260,7 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
               opacity: file && !loading ? 1 : 0.5,
               cursor: file && !loading ? 'pointer' : 'not-allowed',
             }}
-            disabled={!file || loading}
+            disabled={!file || loading || (!importItems && !importUnlocks)}
             onClick={handleImport}
           >
             {loading ? 'Importing...' : 'Import'}

@@ -36,6 +36,8 @@ interface Props {
   onMove: (instanceId: string, row: number, col: number) => void;
   expertView: boolean;
   roomIndex?: number;
+  /** itemId -> legend number; badges rendered when set. */
+  labelNumbers?: Record<string, number> | null;
 }
 
 function buildShapeTypeGrid(placed: PlacedFurniture[], cfg: RoomConfig): (number | null)[][] {
@@ -112,7 +114,7 @@ interface HoverInfo {
   valid: boolean;
 }
 
-export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView, roomIndex = 0 }: Props) {
+export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView, roomIndex = 0, labelNumbers }: Props) {
   const cfg = getRoomConfig(roomIndex);
   const { cols, rows } = cfg;
 
@@ -283,6 +285,37 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
     overflow: 'hidden',
   };
 
+  // Numbered legend badges (work in both views, match the checklist numbers)
+  const labelOverlays = labelNumbers
+    ? placed.map((p) => {
+        const { minR, minC } = getVisualBounds(p.item.shape);
+        const n = labelNumbers[p.item.id];
+        if (!n) return null;
+        return (
+          <div
+            key={`label-${p.instanceId}`}
+            style={{
+              position: 'absolute',
+              left: `calc(${((p.col + minC) / cols) * 100}% + 2px)`,
+              top: `calc(${((p.row + minR) / rows) * 100}% + 2px)`,
+              zIndex: 4,
+              background: 'rgba(0,0,0,0.7)',
+              color: '#fff',
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '0 5px',
+              lineHeight: '15px',
+              pointerEvents: 'none',
+            }}
+            title={p.item.name}
+          >
+            {n}
+          </div>
+        );
+      })
+    : null;
+
   // Image overlays for normal view
   const imageOverlays = !expertView
     ? placed.map((p) => {
@@ -441,6 +474,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
         }),
       )}
       {imageOverlays}
+      {labelOverlays}
       {expertDragOverlays}
       {/* Hover highlight overlay */}
       {hoverInfo && Array.from({ length: rows }, (_, row) =>

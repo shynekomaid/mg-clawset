@@ -226,3 +226,22 @@ side panel; welcome modal was a text wall with buried actions.
 - Discovered for later: `files.house_state` contains the in-game furniture
   placements (room name + coordinates) — could power "import current
   layout from save".
+
+## Addendum (2026-06-10, #5): Item labels, import options, idols
+
+- **Labels**: "Labels" toggle overlays numbered badges on placed items
+  (both views); numbers match the checklist, which auto-opens as the
+  legend. Hover tooltips with full names already existed. Chosen over
+  always-on name overlays: 60+ items would be unreadable; number + legend
+  is the map-key pattern.
+- **Import options**: dialog checkboxes for "Owned furniture counts" and
+  "Unlocked rooms" (Import disabled when neither). "Current room layouts"
+  shown disabled: house_state placement keys (438–624) do not join the
+  furniture table keys (1–150), so item identity per placement is not yet
+  decodable. Crackable later with a controlled save.
+- **Idols**: special furniture (wiki "Special Furniture") selectable in the
+  auto-fill panel ("Idols — always placed"). Selected idols are forced
+  into the layout via new `mustInclude` option: bypasses the score filter
+  (e.g. Idol of Chaos, −5 comfort), placed once each, survives
+  ruin-and-recreate. Chastity/Chaos behavioral notes shown as tooltips.
+  House-wide fill: idols disabled with a hint to fill a single room.
