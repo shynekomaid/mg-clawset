@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { parseSavegame } from '../utils/savegame';
-import type { HouseInfo } from '../utils/savegame';
+import type { HouseInfo, SavedPlacement } from '../utils/savegame';
 
 const overlay: CSSProperties = {
   position: 'fixed',
@@ -102,7 +102,7 @@ const statusText: CSSProperties = {
 interface Props {
   open: boolean;
   onClose: () => void;
-  onImport: (ownership: Record<string, number> | null, houseInfo: HouseInfo | null) => void;
+  onImport: (ownership: Record<string, number> | null, houseInfo: HouseInfo | null, placements: SavedPlacement[] | null) => void;
   furnitureIdMap: Map<string, string>; // lowercase name -> id
   /** Called when the file was picked via the File System Access API (Chromium) so the handle can be remembered. */
   onHandleCaptured?: (handle: FileSystemFileHandle) => void;
@@ -112,6 +112,7 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
   const [file, setFile] = useState<File | null>(null);
   const [importItems, setImportItems] = useState(true);
   const [importUnlocks, setImportUnlocks] = useState(true);
+  const [importLayouts, setImportLayouts] = useState(true);
   const [status, setStatus] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>('');
@@ -130,12 +131,12 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
       const uint8Array = new Uint8Array(arrayBuffer);
 
       setStatus('Parsing furniture data...');
-      const { ownership: newOwnership, matched, unmatchedNames, houseInfo } = await parseSavegame(uint8Array, furnitureIdMap);
+      const { ownership: newOwnership, matched, unmatchedNames, houseInfo, placements } = await parseSavegame(uint8Array, furnitureIdMap);
 
-      console.log('[SaveImport] Matched:', matched, 'Unmatched:', unmatchedNames, 'House:', houseInfo);
+      console.log('[SaveImport] Matched:', matched, 'Unmatched:', unmatchedNames, 'House:', houseInfo, 'Placed:', placements.length);
 
-      setStatus(`Found ${matched} furniture types (${unmatchedNames.length} unmatched). Importing...`);
-      onImport(importItems ? newOwnership : null, importUnlocks ? houseInfo : null);
+      setStatus(`Found ${matched} furniture types (${unmatchedNames.length} unmatched, ${placements.length} placed in rooms). Importing...`);
+      onImport(importItems ? newOwnership : null, importUnlocks ? houseInfo : null, importLayouts ? placements : null);
 
       setTimeout(() => {
         setStatus('');
@@ -177,9 +178,9 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
             <input type="checkbox" checked={importUnlocks} onChange={(e) => setImportUnlocks(e.target.checked)} />
             Unlocked rooms
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: 0.5, cursor: 'not-allowed' }} title="The save stores placements with ids we cannot map to items yet">
-            <input type="checkbox" disabled />
-            Current room layouts <span style={{ fontSize: 11 }}>(save format not fully decoded yet)</span>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} title="Replaces the rooms in this tool with what is currently placed in your game">
+            <input type="checkbox" checked={importLayouts} onChange={(e) => setImportLayouts(e.target.checked)} />
+            Current room layouts
           </label>
         </div>
 
@@ -260,7 +261,7 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
               opacity: file && !loading ? 1 : 0.5,
               cursor: file && !loading ? 'pointer' : 'not-allowed',
             }}
-            disabled={!file || loading || (!importItems && !importUnlocks)}
+            disabled={!file || loading || (!importItems && !importUnlocks && !importLayouts)}
             onClick={handleImport}
           >
             {loading ? 'Importing...' : 'Import'}

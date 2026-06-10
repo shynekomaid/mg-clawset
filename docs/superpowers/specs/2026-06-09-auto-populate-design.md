@@ -258,3 +258,30 @@ side panel; welcome modal was a text wall with buried actions.
   math as the room grid) instead of expert-style colored cells — it looked
   like expert view had been force-enabled. Visual-bounds helpers moved to
   gridHelpers.ts (also fixes react-refresh lint).
+
+## Addendum (2026-06-10, #7): Room layout import — format cracked
+
+Controlled save (single crystal ball at attic bottom-left) revealed the
+placement encoding. It lives in the `furniture` table, not `house_state`
+(that one is the visual storage pile):
+
+```
+furniture.data blob:
+  int32 field1, int32 name_len, int32 pad, name,
+  int64 quality (0 normal / 2 rare),
+  int64 room_len + room name ("" = stored, e.g. "Attic", "Floor1_Small"),
+  int32 x, int32 y (bottom-left solid cell), int32 stack-order, ...
+```
+
+Coordinate mapping (derived from crystal ball (-8,-10)=attic col0,row7 and
+six food boxes (-10, -11..-6)=Floor1_Small col0, rows 6..1):
+
+- regular rooms: col = x + 10, row = −y − 5
+- attic:         col = x + 8,  row = −y − 3
+
+Room name → app index: Floor1_Large=Room1, Floor1_Small=Room2,
+Floor2_Large=Room3, Floor2_Small=Room4, Attic=Attic (Floor2 names are
+inferred, unverified — no Floor2 placements in the sample saves).
+
+"Current room layouts" import option is now enabled (default on); App
+converts bottom-left coords to shape-origin cells via visual bounds.

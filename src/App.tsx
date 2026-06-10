@@ -14,7 +14,8 @@ import { autoPopulateRoom } from './utils/autoPopulate';
 import type { AlgorithmKey } from './utils/autoPopulate';
 import useIsMobile from './hooks/useIsMobile';
 import { parseSavegame } from './utils/savegame';
-import type { HouseInfo } from './utils/savegame';
+import type { HouseInfo, SavedPlacement } from './utils/savegame';
+import { getVisualBounds } from './utils/gridHelpers';
 import { saveSavefileHandle, loadSavefileHandle, readRememberedSavefile } from './utils/savefileHandle';
 
 function countSpaces(shape: number[][]): number {
@@ -363,7 +364,7 @@ function App() {
     setOwnership((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   }, []);
 
-  const handleImportOwnership = useCallback((newOwnership: Record<string, number> | null, newHouseInfo: HouseInfo | null = null) => {
+  const handleImportOwnership = useCallback((newOwnership: Record<string, number> | null, newHouseInfo: HouseInfo | null = null, placements: SavedPlacement[] | null = null) => {
     if (newOwnership) {
       setOwnership(newOwnership);
       // After loading a savegame, show what the player actually owns
@@ -372,6 +373,24 @@ function App() {
     if (newHouseInfo) {
       setHouseInfo(newHouseInfo);
       localStorage.setItem(HOUSE_UNLOCKS_KEY, JSON.stringify(newHouseInfo));
+    }
+    if (placements) {
+      // Saved coords point at the bottom-left solid cell; our origin is the
+      // shape's top-left, so shift by the solid bounding box.
+      const byId = new Map(allFurniture.map((f) => [f.id, f]));
+      const newRooms: PlacedFurniture[][] = Array.from({ length: NUM_ROOMS }, () => []);
+      for (const pl of placements) {
+        const item = byId.get(pl.itemId);
+        if (!item || pl.roomIndex < 0 || pl.roomIndex >= NUM_ROOMS) continue;
+        const { maxR, minC } = getVisualBounds(item.shape);
+        newRooms[pl.roomIndex].push({
+          instanceId: `placed-${nextInstanceId++}`,
+          item,
+          row: pl.row - maxR,
+          col: pl.col - minC,
+        });
+      }
+      setRooms(newRooms);
     }
   }, []);
 
