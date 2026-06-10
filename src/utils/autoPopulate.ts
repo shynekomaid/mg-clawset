@@ -20,15 +20,17 @@ export const ALGORITHMS: Record<AlgorithmKey, { label: string; description: stri
   maximize: { label: 'Maximize', description: 'Randomized search — tries many layouts, keeps the best (~0.5s)' },
 };
 
-export function statScore(item: FurnitureItem, stats: StatKey[]): number {
+export type StatWeights = Partial<Record<StatKey, number>>;
+
+export function statScore(item: FurnitureItem, weights: StatWeights): number {
   let score = 0;
-  for (const stat of stats) score += item[stat];
+  for (const [stat, w] of Object.entries(weights)) score += item[stat as StatKey] * w;
   return score;
 }
 
 export interface AutoPopulateOptions {
-  /** Stats to maximize; items are scored by the sum of the selected stats. */
-  stats: StatKey[];
+  /** Stat weights; items are scored by the weighted sum (negative = avoid). */
+  weights: StatWeights;
   roomIndex: number;
   allFurniture: FurnitureItem[];
   ownership: Record<string, number>;
@@ -41,8 +43,10 @@ export interface AutoPopulateOptions {
   seed?: number;
   /** Exact number of 'maximize' search rounds; overrides budgetMs. Seed + iterations = fully deterministic. */
   iterations?: number;
-  /** Item ids that must be placed (once each, if owned) regardless of their score — e.g. idols with special effects. */
+  /** Item ids that must be placed (all owned copies) regardless of score — idols, food boxes. */
   mustInclude?: string[];
+  /** Minimum room totals to satisfy before maximizing, e.g. { comfort: 4 } for breeding. */
+  minStats?: Partial<Record<StatKey, number>>;
 }
 
 interface Candidate {
@@ -70,17 +74,19 @@ interface ScanMode {
 }
 
 function buildCandidates(opts: AutoPopulateOptions): Candidate[] {
-  const { stats, allFurniture, ownership, usedInOtherRooms, mustInclude } = opts;
+  const { weights, allFurniture, ownership, usedInOtherRooms, mustInclude, minStats } = opts;
   const mandatoryIds = new Set(mustInclude ?? []);
+  const floorStats = Object.keys(minStats ?? {}) as StatKey[];
   const candidates: Candidate[] = [];
   for (const item of allFurniture) {
     const remaining = (ownership[item.id] ?? 0) - (usedInOtherRooms[item.id] ?? 0);
     if (remaining <= 0) continue;
     const mandatory = mandatoryIds.has(item.id);
-    const score = statScore(item, stats);
-    if (score <= 0 && !mandatory) continue;
-    // Mandatory items are placed once; extra owned copies compete normally only if they score
-    candidates.push({ item, score, remaining: mandatory ? 1 : remaining, mandatory });
+    const score = statScore(item, weights);
+    // Keep items that score, are forced, or can contribute to a stat floor
+    const helpsFloor = floorStats.some((st) => item[st] > 0);
+    if (score <= 0 && !mandatory && !helpsFloor) continue;
+    candidates.push({ item, score, remaining, mandatory });
   }
   return candidates;
 }
@@ -111,6 +117,8 @@ function fillGreedy(
   cfg: RoomConfig,
   makeInstanceId: () => string,
   scan: ScanMode = { rowsReversed: false, colsReversed: false },
+  minStats?: Partial<Record<StatKey, number>>,
+  baseTotals?: Partial<Record<StatKey, number>>,
 ): PlacedFurniture[] {
   // Scan offsets extended so anchor cells (which may hang outside the solid
   // bounding box) can reach floor/ceiling anchor rows.
@@ -143,14 +151,87 @@ function fillGreedy(
   };
 
   const placed: PlacedFurniture[] = [];
-  // Items that failed to fit; retried only after new anchor points appear
-  // (occupancy only ever shrinks options, anchor points can unlock anchored items).
+  const totals: Record<StatKey, number> = { appeal: 0, comfort: 0, stimulation: 0, health: 0, mutation: 0 };
+
+  const tryPlace = (cand: Candidate): boolean => {
+    const spot = findSpot(cand.item);
+    if (!spot) return false;
+    const piece: PlacedFurniture = {
+      instanceId: makeInstanceId(),
+      item: cand.item,
+      row: spot.row,
+      col: spot.col,
+    };
+    placed.push(piece);
+    applyPlacement(piece);
+    cand.remaining -= 1;
+    for (const st of Object.keys(totals) as StatKey[]) totals[st] += cand.item[st];
+    return true;
+  };
+
+  // Phase 1: mandatory items (all copies)
+  for (const cand of candidates) {
+    if (!cand.mandatory) continue;
+    while (cand.remaining > 0) {
+      if (!tryPlace(cand)) break;
+    }
+  }
+
+  // Phase 2: satisfy stat floors with the most efficient contributors
+  if (minStats) {
+    for (const [stat, min] of Object.entries(minStats) as [StatKey, number][]) {
+      for (;;) {
+        if (totals[stat] + (baseTotals?.[stat] ?? 0) >= min) break;
+        const pool = candidates
+          .filter((c) => c.remaining > 0 && c.item[stat] > 0)
+          .sort((a, b) => b.item[stat] / b.item.spacesOccupied - a.item[stat] / a.item.spacesOccupied);
+        let placedOne = false;
+        for (const cand of pool) {
+          if (tryPlace(cand)) { placedOne = true; break; }
+        }
+        if (!placedOne) break; // floor unreachable; fill anyway
+      }
+    }
+  }
+
+  // Phase 3: greedy score fill. Items that failed to fit are retried only
+  // after new anchor points appear (occupancy only ever shrinks options,
+  // anchor points can unlock anchored items).
   const failed = new Set<string>();
+
+  const wouldBreakFloor = (cand: Candidate): boolean => {
+    if (!minStats) return false;
+    for (const [stat, min] of Object.entries(minStats) as [StatKey, number][]) {
+      if (cand.item[stat] < 0 && totals[stat] + (baseTotals?.[stat] ?? 0) + cand.item[stat] < min) return true;
+    }
+    return false;
+  };
+
+  // A floor-blocked filler can be unblocked by placing another floor
+  // contributor first (e.g. one more sofa buys room for a -1 comfort toy).
+  const addHeadroomFor = (cand: Candidate): boolean => {
+    if (!minStats) return false;
+    for (const [stat, min] of Object.entries(minStats) as [StatKey, number][]) {
+      if (cand.item[stat] >= 0) continue;
+      if (totals[stat] + (baseTotals?.[stat] ?? 0) + cand.item[stat] >= min) continue;
+      const pool = candidates
+        .filter((c) => c.remaining > 0 && c.item[stat] > 0)
+        .sort((a, b) => b.item[stat] / b.item.spacesOccupied - a.item[stat] / a.item.spacesOccupied);
+      for (const h of pool) {
+        if (tryPlace(h)) return true;
+      }
+    }
+    return false;
+  };
 
   for (;;) {
     let progress = false;
     for (const cand of candidates) {
-      if (cand.remaining <= 0 || failed.has(cand.item.id)) continue;
+      if (cand.remaining <= 0 || failed.has(cand.item.id) || cand.score <= 0) continue;
+      if (wouldBreakFloor(cand)) {
+        if (addHeadroomFor(cand)) { progress = true; break; }
+        continue;
+      }
       const spot = findSpot(cand.item);
       if (!spot) {
         failed.add(cand.item.id);
@@ -165,6 +246,7 @@ function fillGreedy(
       placed.push(piece);
       if (applyPlacement(piece)) failed.clear();
       cand.remaining -= 1;
+      for (const st of Object.keys(totals) as StatKey[]) totals[st] += cand.item[st];
       progress = true;
       break; // restart from best candidate
     }
@@ -174,9 +256,9 @@ function fillGreedy(
   return placed;
 }
 
-function totalScore(placed: PlacedFurniture[], stats: StatKey[]): number {
+function totalScore(placed: PlacedFurniture[], weights: StatWeights): number {
   let sum = 0;
-  for (const p of placed) sum += statScore(p.item, stats);
+  for (const p of placed) sum += statScore(p.item, weights);
   return sum;
 }
 
@@ -185,7 +267,7 @@ function runGreedy(opts: AutoPopulateOptions, cfg: RoomConfig, rng?: Rng, scan?:
   sortCandidates(candidates, rng);
   const occupancy = buildOccupancy([], cfg);
   const anchorPoints = buildAnchorPointSet([], cfg);
-  return fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId, scan);
+  return fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId, scan, opts.minStats);
 }
 
 /**
@@ -214,9 +296,16 @@ function ruinAndRecreate(
   for (const c of candidates) c.remaining -= keptCounts[c.item.id] || 0;
   sortCandidates(candidates, rng);
 
+  const keptTotals: Partial<Record<StatKey, number>> = {};
+  for (const p of kept) {
+    for (const st of ['appeal', 'comfort', 'stimulation', 'health', 'mutation'] as StatKey[]) {
+      keptTotals[st] = (keptTotals[st] ?? 0) + p.item[st];
+    }
+  }
+
   const occupancy = buildOccupancy(kept, cfg);
   const anchorPoints = buildAnchorPointSet(kept, cfg);
-  const added = fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId);
+  const added = fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId, undefined, opts.minStats, keptTotals);
   return [...kept, ...added];
 }
 
@@ -227,10 +316,10 @@ function runMaximize(opts: AutoPopulateOptions, cfg: RoomConfig): PlacedFurnitur
     layout.reduce((s, p) => s + p.item.spacesOccupied, 0);
 
   let best = runGreedy(opts, cfg); // deterministic baseline
-  let bestScore = totalScore(best, opts.stats);
+  let bestScore = totalScore(best, opts.weights);
 
   const consider = (layout: PlacedFurniture[]) => {
-    const score = totalScore(layout, opts.stats);
+    const score = totalScore(layout, opts.weights);
     if (score > bestScore || (score === bestScore && cellsUsed(layout) > cellsUsed(best))) {
       best = layout;
       bestScore = score;

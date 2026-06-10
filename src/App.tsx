@@ -11,7 +11,7 @@ import AppHeader from './components/AppHeader';
 import WelcomeHero from './components/WelcomeHero';
 import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/anchorHelpers';
 import { autoPopulateRoom } from './utils/autoPopulate';
-import type { AlgorithmKey } from './utils/autoPopulate';
+import type { AlgorithmKey, StatWeights } from './utils/autoPopulate';
 import useIsMobile from './hooks/useIsMobile';
 import { parseSavegame } from './utils/savegame';
 import type { HouseInfo, SavedPlacement } from './utils/savegame';
@@ -71,6 +71,7 @@ const HERO_SEEN_KEY = 'mg-clawset-hero-seen';
 // Special idols (wiki: "Special Furniture") — unique effects beyond raw stats
 const IDOL_RE = /special_\w*(idol)/i;
 const idolItems = allFurniture.filter((it) => IDOL_RE.test(it.image_url));
+const foodBoxItem = allFurniture.find((it) => it.image_url.includes('special_foodbox')) ?? null;
 const HOUSE_UNLOCKS_KEY = 'mg-clawset-house-unlocks';
 
 function loadHouseInfo(): HouseInfo | null {
@@ -288,7 +289,13 @@ function App() {
     [ownership],
   );
 
-  const handleAutoPopulate = useCallback((stats: StatKey[], algorithm: AlgorithmKey, idolIds: string[] = []) => {
+  const handleAutoPopulate = useCallback((config: {
+    weights: StatWeights;
+    algorithm: AlgorithmKey;
+    mustInclude: string[];
+    minStats?: Partial<Record<StatKey, number>>;
+  }) => {
+    const { weights, algorithm, mustInclude, minStats } = config;
     const makeInstanceId = () => `placed-${nextInstanceId++}`;
 
     if (activeRoom === HOUSE_VIEW) {
@@ -303,7 +310,8 @@ function App() {
       let placedTotal = 0;
       for (const ri of fillOrder) {
         const result = autoPopulateRoom({
-          stats,
+          weights,
+          minStats,
           algorithm,
           roomIndex: ri,
           allFurniture,
@@ -331,14 +339,15 @@ function App() {
       }
     });
     const result = autoPopulateRoom({
-      stats,
+      weights,
+      minStats,
       algorithm,
       roomIndex: activeRoom,
       allFurniture,
       ownership,
       usedInOtherRooms,
       makeInstanceId,
-      mustInclude: idolIds,
+      mustInclude,
     });
     if (result.length === 0) {
       window.alert('Nothing to place: no owned furniture with remaining copies scores positively for the selected stats.');
@@ -587,6 +596,7 @@ function App() {
             onToggleDrawer={() => setDrawerOpen((v) => !v)}
             isRoomUnlocked={isRoomUnlocked}
             idols={ownedIdols}
+            foodBox={foodBoxItem && (ownership[foodBoxItem.id] || 0) > 0 ? foodBoxItem : null}
           />
         )}
         <div

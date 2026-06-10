@@ -285,3 +285,22 @@ inferred, unverified — no Floor2 placements in the sample saves).
 
 "Current room layouts" import option is now enabled (default on); App
 converts bottom-left coords to shape-origin cells via visual bounds.
+
+## Addendum (2026-06-10, #8): Goal presets, stat floors, tri-state weights
+
+- Coordinate formulas confirmed for both regular rooms via second controlled
+  save (kettle Floor1_Large (-10,-11) = col0/row6; wobble bird Floor1_Small
+  (5,-11) = col15/row6).
+- Auto-fill panel gains goal presets:
+  - **Breeding** — maximize stimulation with a room-comfort floor of 4
+    (new `minStats` option; floor satisfied first with the most
+    comfort-per-space items, fillers with negative comfort are blocked
+    unless headroom is placed alongside them).
+  - **Storage** — maximize health + comfort; auto-selects the Idol of
+    Chastity when owned.
+  - **Mutation** — maximize mutation + comfort, stimulation weighted −1.
+- Stat checkboxes upgraded to tri-state (maximize / avoid / off); editing
+  switches the preset to Custom. API moved from `stats: StatKey[]` to
+  `weights: StatWeights` with negative weights supported.
+- "Include food storage" option force-places all owned Food Box copies
+  (`mustInclude` now places every owned copy, not one).

@@ -29,21 +29,25 @@ function makeItem(over: Partial<FurnitureItem> & { name: string }): FurnitureIte
 describe('statScore', () => {
   const item = makeItem({ name: 'x', appeal: 1, comfort: 2, stimulation: 3, health: 1, mutation: 4 });
 
-  it('sums only the selected stats', () => {
-    expect(statScore(item, ['comfort', 'stimulation'])).toBe(5);
-    expect(statScore(item, ['appeal'])).toBe(1);
-    expect(statScore(item, ['health', 'mutation'])).toBe(5);
+  it('sums weighted stats', () => {
+    expect(statScore(item, { comfort: 1, stimulation: 1 })).toBe(5);
+    expect(statScore(item, { appeal: 1 })).toBe(1);
+    expect(statScore(item, { health: 1, mutation: 1 })).toBe(5);
+  });
+
+  it('negative weights penalize', () => {
+    expect(statScore(item, { mutation: 1, comfort: 1, stimulation: -1 })).toBe(3);
   });
 
   it('empty selection scores zero', () => {
-    expect(statScore(item, [])).toBe(0);
+    expect(statScore(item, {})).toBe(0);
   });
 });
 
 function makeOpts(over: Partial<Parameters<typeof autoPopulateRoom>[0]>) {
   let n = 0;
   return {
-    stats: ['comfort', 'stimulation'] as StatKey[],
+    weights: { comfort: 1, stimulation: 1 } as Partial<Record<StatKey, number>>,
     roomIndex: 0,
     allFurniture: [],
     ownership: {},
@@ -126,7 +130,7 @@ describe('autoPopulateRoom', () => {
     const stimToy = makeItem({ name: 'toy', stimulation: 3, shape: [[2]] });
     const bed = makeItem({ name: 'bed', comfort: 2, shape: [[2]] });
     const result = autoPopulateRoom(makeOpts({
-      stats: ['comfort'] as StatKey[],
+      weights: { comfort: 1 } as Partial<Record<StatKey, number>>,
       allFurniture: [stimToy, bed],
       ownership: { toy: 5, bed: 1 },
     }));
@@ -164,7 +168,7 @@ describe('autoPopulateRoom', () => {
     const maxA = autoPopulateRoom(makeOpts({ ...pool, algorithm: 'maximize', seed: 42, iterations: 30 }));
     const maxB = autoPopulateRoom(makeOpts({ ...pool, algorithm: 'maximize', seed: 42, iterations: 30 }));
 
-    const score = (r: PlacedFurniture[]) => r.reduce((s, p) => s + statScore(p.item, ['comfort', 'stimulation']), 0);
+    const score = (r: PlacedFurniture[]) => r.reduce((s, p) => s + statScore(p.item, { comfort: 1, stimulation: 1 }), 0);
 
     // never worse than greedy baseline
     expect(score(maxA)).toBeGreaterThanOrEqual(score(greedy));
@@ -222,6 +226,63 @@ describe('autoPopulateRoom', () => {
         }
       }
     }
+  });
+
+  it('minStats places floor-satisfying items before maximizing', () => {
+    const toy = makeItem({ name: 'toy', stimulation: 3, shape: [[2]] });
+    const sofa = makeItem({ name: 'sofa', comfort: 2, shape: [[2]] });
+    const result = autoPopulateRoom(makeOpts({
+      weights: { stimulation: 1 } as Partial<Record<StatKey, number>>,
+      minStats: { comfort: 4 },
+      allFurniture: [toy, sofa],
+      ownership: { toy: 200, sofa: 5 },
+    }));
+    const comfort = result.reduce((s, p) => s + p.item.comfort, 0);
+    expect(comfort).toBeGreaterThanOrEqual(4);
+    // floor met with minimal comfort items, rest is stimulation
+    expect(result.filter(p => p.item.name === 'sofa')).toHaveLength(2);
+    expect(result.filter(p => p.item.name === 'toy').length).toBeGreaterThan(50);
+  });
+
+  it('minStats survives negative-comfort filler items', () => {
+    const sofa = makeItem({ name: 'sofa', comfort: 2, shape: [[2]] });
+    const edgyToy = makeItem({ name: 'edgy', stimulation: 3, comfort: -1, shape: [[2]] });
+    const result = autoPopulateRoom(makeOpts({
+      weights: { stimulation: 1 } as Partial<Record<StatKey, number>>,
+      minStats: { comfort: 4 },
+      allFurniture: [sofa, edgyToy],
+      ownership: { sofa: 10, edgy: 200 },
+    }));
+    const comfort = result.reduce((s, p) => s + p.item.comfort, 0);
+    expect(comfort).toBeGreaterThanOrEqual(4);
+    expect(result.some(p => p.item.name === 'edgy')).toBe(true); // still fills with stim items
+  });
+
+  it('minStats also holds for maximize algorithm', () => {
+    const toy = makeItem({ name: 'toy', stimulation: 3, shape: [[2]] });
+    const sofa = makeItem({ name: 'sofa', comfort: 2, shape: [[2]] });
+    const result = autoPopulateRoom(makeOpts({
+      weights: { stimulation: 1 } as Partial<Record<StatKey, number>>,
+      minStats: { comfort: 4 },
+      allFurniture: [toy, sofa],
+      ownership: { toy: 200, sofa: 5 },
+      algorithm: 'maximize',
+      seed: 11,
+      iterations: 10,
+    }));
+    const comfort = result.reduce((s, p) => s + p.item.comfort, 0);
+    expect(comfort).toBeGreaterThanOrEqual(4);
+  });
+
+  it('mustInclude places every owned copy (food boxes)', () => {
+    const foodbox = makeItem({ name: 'foodbox', shape: [[2, 2]] }); // zero stats
+    const sofa = makeItem({ name: 'sofa', comfort: 2, shape: [[2]] });
+    const result = autoPopulateRoom(makeOpts({
+      allFurniture: [foodbox, sofa],
+      ownership: { foodbox: 3, sofa: 2 },
+      mustInclude: ['foodbox'],
+    }));
+    expect(result.filter(p => p.item.name === 'foodbox')).toHaveLength(3);
   });
 
   it('mustInclude forces items in even with non-positive score', () => {

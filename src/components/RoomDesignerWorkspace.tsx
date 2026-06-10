@@ -6,7 +6,7 @@ import RoomStatsSummary from './RoomStatsSummary';
 import { getRoomLabel, HOUSE_VIEW } from '../types/furniture';
 import { captureRoom, captureHouse } from '../utils/roomCapture';
 import { ALGORITHMS, ALL_STATS, STAT_LABELS } from '../utils/autoPopulate';
-import type { AlgorithmKey } from '../utils/autoPopulate';
+import type { AlgorithmKey, StatWeights } from '../utils/autoPopulate';
 import type { StatKey } from '../types/furniture';
 import StatIcon from './StatIcon';
 import RoomChecklist from './RoomChecklist';
@@ -18,6 +18,36 @@ const LEGEND: { type: number; color: string; border: string; label: string }[] =
   { type: 4, color: 'var(--sand-dune)', border: 'rgba(229,220,197,0.5)', label: 'Anchor' },
   { type: 5, color: 'var(--charcoal)', border: 'rgba(76,76,71,0.5)', label: 'Background' },
 ];
+
+type FillPresetKey = 'breeding' | 'storage' | 'mutation';
+
+const EMPTY_WEIGHTS: Record<StatKey, -1 | 0 | 1> = { appeal: 0, comfort: 0, stimulation: 0, health: 0, mutation: 0 };
+
+const FILL_PRESETS: Record<FillPresetKey, {
+  label: string;
+  description: string;
+  tristate: Partial<Record<StatKey, -1 | 0 | 1>>;
+  minStats?: Partial<Record<StatKey, number>>;
+  autoIdolKey?: string;
+}> = {
+  breeding: {
+    label: 'Breeding',
+    description: 'Maximize stimulation, keep room comfort at 4+ (enough for 4 cats)',
+    tristate: { stimulation: 1 },
+    minStats: { comfort: 4 },
+  },
+  storage: {
+    label: 'Storage',
+    description: 'Maximize health + comfort; auto-selects the Idol of Chastity if owned (no breeding)',
+    tristate: { health: 1, comfort: 1 },
+    autoIdolKey: 'suppressoridol',
+  },
+  mutation: {
+    label: 'Mutation',
+    description: 'Maximize mutation + comfort with the lowest possible stimulation',
+    tristate: { mutation: 1, comfort: 1, stimulation: -1 },
+  },
+};
 
 interface RoomExportEntry {
   id: string;
@@ -35,25 +65,34 @@ interface Props {
   onRemove: (instanceId: string) => void;
   onMove: (instanceId: string, row: number, col: number) => void;
   onImportRooms: (entries: RoomExportEntry[][]) => void;
-  onAutoPopulate: (stats: StatKey[], algorithm: AlgorithmKey, idolIds: string[]) => void;
+  onAutoPopulate: (config: {
+    weights: StatWeights;
+    algorithm: AlgorithmKey;
+    mustInclude: string[];
+    minStats?: Partial<Record<StatKey, number>>;
+  }) => void;
   ownership: Record<string, number>;
   drawerOpen: boolean;
   onToggleDrawer: () => void;
   isRoomUnlocked: (i: number) => boolean;
   /** Owned special idols selectable for forced placement. */
   idols: FurnitureItem[];
+  /** Owned food box item (null when none owned). */
+  foodBox: FurnitureItem | null;
 }
 
 export default function RoomDesignerWorkspace({
   visible, placed, rooms, activeRoom, onActiveRoomChange,
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
-  drawerOpen, onToggleDrawer, isRoomUnlocked, idols,
+  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox,
 }: Props) {
   const [expertView, setExpertView] = useState(false);
   const [autoFillOpen, setAutoFillOpen] = useState(false);
-  const [selectedStats, setSelectedStats] = useState<Set<StatKey>>(
-    () => new Set<StatKey>(['comfort', 'stimulation']),
+  const [presetKey, setPresetKey] = useState<FillPresetKey | 'custom'>('breeding');
+  const [statWeights, setStatWeights] = useState<Record<StatKey, -1 | 0 | 1>>(
+    () => ({ ...EMPTY_WEIGHTS, ...FILL_PRESETS.breeding.tristate }),
   );
+  const [includeFood, setIncludeFood] = useState(false);
   const [algorithm, setAlgorithm] = useState<AlgorithmKey>('maximize');
   const [selectedIdols, setSelectedIdols] = useState<Set<string>>(() => new Set());
   const [checklistOpen, setChecklistOpen] = useState(false);
@@ -106,13 +145,22 @@ export default function RoomDesignerWorkspace({
     return map;
   }, [placed]);
 
-  const toggleStat = (stat: StatKey) => {
-    setSelectedStats((prev) => {
-      const next = new Set(prev);
-      if (next.has(stat)) next.delete(stat);
-      else next.add(stat);
-      return next;
-    });
+  const applyPreset = (key: FillPresetKey) => {
+    const preset = FILL_PRESETS[key];
+    setPresetKey(key);
+    setStatWeights({ ...EMPTY_WEIGHTS, ...preset.tristate });
+    if (preset.autoIdolKey) {
+      const idol = idols.find((i) => i.image_url.includes(preset.autoIdolKey!));
+      if (idol) setSelectedIdols((prev) => new Set(prev).add(idol.id));
+    }
+  };
+
+  const cycleStat = (stat: StatKey) => {
+    setPresetKey('custom');
+    setStatWeights((prev) => ({
+      ...prev,
+      [stat]: prev[stat] === 0 ? 1 : prev[stat] === 1 ? -1 : 0,
+    }));
   };
 
   const toggleIdol = (id: string) => {
@@ -124,18 +172,29 @@ export default function RoomDesignerWorkspace({
     });
   };
 
+  const activeWeights: StatWeights = Object.fromEntries(
+    ALL_STATS.filter((st) => statWeights[st] !== 0).map((st) => [st, statWeights[st]]),
+  );
+  const minStats = presetKey !== 'custom' ? FILL_PRESETS[presetKey].minStats : undefined;
+  const hasPositiveWeight = ALL_STATS.some((st) => statWeights[st] > 0);
+
   const handleAutoFill = () => {
-    const stats = ALL_STATS.filter((s) => selectedStats.has(s));
-    const statText = stats.map((s) => STAT_LABELS[s]).join(' + ');
+    const statText = ALL_STATS.filter((st) => statWeights[st] !== 0)
+      .map((st) => `${statWeights[st] > 0 ? '+' : '\u2212'}${STAT_LABELS[st]}`)
+      .join(' ');
+    const label = presetKey !== 'custom' ? FILL_PRESETS[presetKey].label : statText;
     if (
       placed.length > 0 &&
-      !window.confirm(`Replace ${placed.length} item(s) in ${getRoomLabel(activeRoom)} with an auto-generated layout maximizing ${statText}?`)
+      !window.confirm(`Replace ${placed.length} item(s) in ${getRoomLabel(activeRoom)} with an auto-generated "${label}" layout?`)
     ) {
       return;
     }
     setAutoFillOpen(false);
-    const idolIds = activeRoom === HOUSE_VIEW ? [] : idols.filter((i) => selectedIdols.has(i.id)).map((i) => i.id);
-    onAutoPopulate(stats, algorithm, idolIds);
+    const mustInclude = activeRoom === HOUSE_VIEW ? [] : [
+      ...idols.filter((i) => selectedIdols.has(i.id)).map((i) => i.id),
+      ...(includeFood && foodBox ? [foodBox.id] : []),
+    ];
+    onAutoPopulate({ weights: activeWeights, algorithm, mustInclude, minStats });
   };
 
   const IDOL_NOTES: Record<string, string> = {
@@ -332,20 +391,71 @@ export default function RoomDesignerWorkspace({
                 gap: 10,
                 minWidth: 220,
               }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)' }}>Maximize stats</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {ALL_STATS.map((stat) => (
-                    <label key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedStats.has(stat)}
-                        onChange={() => toggleStat(stat)}
-                      />
-                      <StatIcon stat={stat} size={14} />
-                      {STAT_LABELS[stat]}
-                    </label>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)' }}>Preset</div>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {(Object.keys(FILL_PRESETS) as FillPresetKey[]).map((key) => (
+                    <button
+                      key={key}
+                      style={{
+                        ...smallBtn,
+                        fontSize: 11,
+                        padding: '4px 8px',
+                        ...(presetKey === key ? { background: 'var(--accent-bg)', color: 'var(--accent)', borderColor: 'var(--accent)' } : {}),
+                      }}
+                      onClick={() => applyPreset(key)}
+                      title={FILL_PRESETS[key].description}
+                    >
+                      {FILL_PRESETS[key].label}
+                    </button>
                   ))}
                 </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)', marginTop: 2 }}>
+                  Stats <span style={{ fontWeight: 400, color: 'var(--text-m)' }}>(click: maximize → avoid → off)</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {ALL_STATS.map((stat) => (
+                    <div
+                      key={stat}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}
+                      onClick={() => cycleStat(stat)}
+                    >
+                      <span style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 4,
+                        border: '1px solid var(--border)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: 12,
+                        background: statWeights[stat] === 1 ? 'var(--accent)' : statWeights[stat] === -1 ? 'var(--charcoal)' : 'var(--social-bg)',
+                        color: statWeights[stat] !== 0 ? '#fff' : 'var(--text-m)',
+                      }}>
+                        {statWeights[stat] === 1 ? '+' : statWeights[stat] === -1 ? '\u2212' : ''}
+                      </span>
+                      <StatIcon stat={stat} size={14} />
+                      {STAT_LABELS[stat]}
+                    </div>
+                  ))}
+                </div>
+                {minStats?.comfort !== undefined && (
+                  <div style={{ fontSize: 11, color: 'var(--text-m)' }}>
+                    Keeps room Comfort ≥ {minStats.comfort} before maximizing.
+                  </div>
+                )}
+                <label
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: foodBox ? 'var(--text)' : 'var(--text-m)', cursor: foodBox ? 'pointer' : 'not-allowed', marginTop: 2 }}
+                  title={foodBox ? 'Force all owned Food Boxes into the layout (+40 max food each)' : 'No Food Box owned'}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={!foodBox}
+                    checked={includeFood && !!foodBox}
+                    onChange={(e) => setIncludeFood(e.target.checked)}
+                  />
+                  Include food storage
+                </label>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)', marginTop: 2 }}>Algorithm</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   {(Object.keys(ALGORITHMS) as AlgorithmKey[]).map((key) => (
@@ -389,12 +499,12 @@ export default function RoomDesignerWorkspace({
                   style={{
                     ...smallBtn,
                     marginTop: 4,
-                    opacity: selectedStats.size === 0 ? 0.5 : 1,
-                    cursor: selectedStats.size === 0 ? 'not-allowed' : 'pointer',
+                    opacity: hasPositiveWeight ? 1 : 0.5,
+                    cursor: hasPositiveWeight ? 'pointer' : 'not-allowed',
                   }}
-                  disabled={selectedStats.size === 0}
+                  disabled={!hasPositiveWeight}
                   onClick={handleAutoFill}
-                  title={selectedStats.size === 0 ? 'Select at least one stat' : `Fill ${getRoomLabel(activeRoom)}`}
+                  title={hasPositiveWeight ? `Fill ${getRoomLabel(activeRoom)}` : 'Set at least one stat to maximize'}
                 >
                   Fill {getRoomLabel(activeRoom)}
                 </button>
