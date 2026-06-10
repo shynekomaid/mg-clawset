@@ -5,8 +5,10 @@ import RoomGrid from './RoomGrid';
 import RoomStatsSummary from './RoomStatsSummary';
 import { getRoomLabel } from '../types/furniture';
 import { captureRoom, captureHouse } from '../utils/roomCapture';
-import { PRESETS, ALGORITHMS } from '../utils/autoPopulate';
-import type { PresetKey, AlgorithmKey } from '../utils/autoPopulate';
+import { ALGORITHMS, ALL_STATS, STAT_LABELS } from '../utils/autoPopulate';
+import type { AlgorithmKey } from '../utils/autoPopulate';
+import type { StatKey } from '../types/furniture';
+import StatIcon from './StatIcon';
 
 const LEGEND: { type: number; color: string; border: string; label: string }[] = [
   { type: 2, color: 'var(--lavender-grey)', border: 'rgba(132,143,165,0.5)', label: 'Solid' },
@@ -31,7 +33,7 @@ interface Props {
   onRemove: (instanceId: string) => void;
   onMove: (instanceId: string, row: number, col: number) => void;
   onImportRooms: (entries: RoomExportEntry[][]) => void;
-  onAutoPopulate: (preset: PresetKey, algorithm: AlgorithmKey) => void;
+  onAutoPopulate: (stats: StatKey[], algorithm: AlgorithmKey) => void;
   ownership: Record<string, number>;
 }
 
@@ -40,18 +42,33 @@ export default function RoomDesignerWorkspace({
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
 }: Props) {
   const [expertView, setExpertView] = useState(false);
-  const [preset, setPreset] = useState<PresetKey>('breeding');
+  const [autoFillOpen, setAutoFillOpen] = useState(false);
+  const [selectedStats, setSelectedStats] = useState<Set<StatKey>>(
+    () => new Set<StatKey>(['comfort', 'stimulation']),
+  );
   const [algorithm, setAlgorithm] = useState<AlgorithmKey>('maximize');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const toggleStat = (stat: StatKey) => {
+    setSelectedStats((prev) => {
+      const next = new Set(prev);
+      if (next.has(stat)) next.delete(stat);
+      else next.add(stat);
+      return next;
+    });
+  };
+
   const handleAutoFill = () => {
+    const stats = ALL_STATS.filter((s) => selectedStats.has(s));
+    const statText = stats.map((s) => STAT_LABELS[s]).join(' + ');
     if (
       placed.length > 0 &&
-      !window.confirm(`Replace ${placed.length} item(s) in ${getRoomLabel(activeRoom)} with an auto-generated ${PRESETS[preset].label} layout?`)
+      !window.confirm(`Replace ${placed.length} item(s) in ${getRoomLabel(activeRoom)} with an auto-generated layout maximizing ${statText}?`)
     ) {
       return;
     }
-    onAutoPopulate(preset, algorithm);
+    setAutoFillOpen(false);
+    onAutoPopulate(stats, algorithm);
   };
 
   const containerStyle: CSSProperties = {
@@ -173,33 +190,82 @@ export default function RoomDesignerWorkspace({
           onActiveRoomChange={onActiveRoomChange}
           ownership={ownership}
         />
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center', alignSelf: 'flex-start' }}>
-          <select
-            value={preset}
-            onChange={(e) => setPreset(e.target.value as PresetKey)}
-            style={{ ...smallBtn, padding: '5px 8px' }}
-            title="Auto-fill preset"
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', alignSelf: 'flex-start', position: 'relative' }}>
+          <button
+            style={{ ...smallBtn, ...(autoFillOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
+            onClick={() => setAutoFillOpen((v) => !v)}
+            title="Automatically fill this room with owned furniture"
           >
-            {(Object.keys(PRESETS) as PresetKey[]).map((key) => (
-              <option key={key} value={key}>{PRESETS[key].label}</option>
-            ))}
-          </select>
-          <select
-            value={algorithm}
-            onChange={(e) => setAlgorithm(e.target.value as AlgorithmKey)}
-            style={{ ...smallBtn, padding: '5px 8px' }}
-            title={ALGORITHMS[algorithm].description}
-          >
-            {(Object.keys(ALGORITHMS) as AlgorithmKey[]).map((key) => (
-              <option key={key} value={key} title={ALGORITHMS[key].description}>{ALGORITHMS[key].label}</option>
-            ))}
-          </select>
-          <button style={smallBtn} onClick={handleAutoFill} title="Automatically fill this room with owned furniture">
-            Auto-fill
+            Auto-fill {autoFillOpen ? '\u25b4' : '\u25be'}
           </button>
           <button style={toggleBtn} onClick={() => setExpertView((v) => !v)}>
             {expertView ? 'Image View' : 'Expert View'}
           </button>
+          {autoFillOpen && (
+            <>
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 9 }}
+                onClick={() => setAutoFillOpen(false)}
+              />
+              <div style={{
+                position: 'absolute',
+                top: 'calc(100% + 6px)',
+                right: 0,
+                zIndex: 10,
+                background: 'var(--code-bg)',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 14,
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35)',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 10,
+                minWidth: 220,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)' }}>Maximize stats</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {ALL_STATS.map((stat) => (
+                    <label key={stat} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={selectedStats.has(stat)}
+                        onChange={() => toggleStat(stat)}
+                      />
+                      <StatIcon stat={stat} size={14} />
+                      {STAT_LABELS[stat]}
+                    </label>
+                  ))}
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)', marginTop: 2 }}>Algorithm</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {(Object.keys(ALGORITHMS) as AlgorithmKey[]).map((key) => (
+                    <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }} title={ALGORITHMS[key].description}>
+                      <input
+                        type="radio"
+                        name="autofill-algorithm"
+                        checked={algorithm === key}
+                        onChange={() => setAlgorithm(key)}
+                      />
+                      {ALGORITHMS[key].label}
+                    </label>
+                  ))}
+                </div>
+                <button
+                  style={{
+                    ...smallBtn,
+                    marginTop: 4,
+                    opacity: selectedStats.size === 0 ? 0.5 : 1,
+                    cursor: selectedStats.size === 0 ? 'not-allowed' : 'pointer',
+                  }}
+                  disabled={selectedStats.size === 0}
+                  onClick={handleAutoFill}
+                  title={selectedStats.size === 0 ? 'Select at least one stat' : `Fill ${getRoomLabel(activeRoom)}`}
+                >
+                  Fill {getRoomLabel(activeRoom)}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>

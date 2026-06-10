@@ -141,3 +141,14 @@ algorithm next to the preset dropdown:
   click can re-roll a different layout.
 
 Measured in app: same pool filled 92/112 cells (Quick) vs 108/112 (Maximize).
+
+## Addendum (2026-06-10): Stat selection + grouped UX
+
+User feedback: presets too generic; controls felt disconnected.
+
+- Presets replaced by free stat selection: checkboxes for Appeal, Comfort,
+  Stimulation, Health, Mutation (equal weight, sum of selected stats;
+  score ≤ 0 still never placed). API: `stats: StatKey[]` replaces `preset`.
+- UI consolidated into one "Auto-fill ▾" button opening a popover panel:
+  stat checkboxes (with stat icons), Quick/Maximize radio, "Fill <room>"
+  button (disabled when no stat selected). Outside click closes panel.

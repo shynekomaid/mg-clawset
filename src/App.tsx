@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { CSSProperties } from 'react';
-import type { Filters, SortConfig, SortField, FurnitureItem, RawFurnitureItem, PlacedFurniture } from './types/furniture';
+import type { Filters, SortConfig, SortField, FurnitureItem, RawFurnitureItem, PlacedFurniture, StatKey } from './types/furniture';
 import { getRoomConfig } from './types/furniture';
 import furnitureData from './data/furniture_data.json';
 import SplitScreenContainer from './components/SplitScreenContainer';
@@ -9,7 +9,7 @@ import RoomDesignerWorkspace from './components/RoomDesignerWorkspace';
 import SaveImportModal from './components/SaveImportModal';
 import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/anchorHelpers';
 import { autoPopulateRoom } from './utils/autoPopulate';
-import type { PresetKey, AlgorithmKey } from './utils/autoPopulate';
+import type { AlgorithmKey } from './utils/autoPopulate';
 import useIsMobile from './hooks/useIsMobile';
 
 function countSpaces(shape: number[][]): number {
@@ -243,7 +243,7 @@ function App() {
     });
   }, [updateActiveRoom, activeRoom]);
 
-  const handleAutoPopulate = useCallback((preset: PresetKey, algorithm: AlgorithmKey) => {
+  const handleAutoPopulate = useCallback((stats: StatKey[], algorithm: AlgorithmKey) => {
     const usedInOtherRooms: Record<string, number> = {};
     rooms.forEach((room, i) => {
       if (i === activeRoom) return;
@@ -252,7 +252,7 @@ function App() {
       }
     });
     const result = autoPopulateRoom({
-      preset,
+      stats,
       algorithm,
       roomIndex: activeRoom,
       allFurniture,
@@ -261,7 +261,7 @@ function App() {
       makeInstanceId: () => `placed-${nextInstanceId++}`,
     });
     if (result.length === 0) {
-      window.alert('Nothing to place: no owned furniture with remaining copies scores positively for this preset.');
+      window.alert('Nothing to place: no owned furniture with remaining copies scores positively for the selected stats.');
       return;
     }
     setRooms(prev => prev.map((room, i) => (i === activeRoom ? result : room)));

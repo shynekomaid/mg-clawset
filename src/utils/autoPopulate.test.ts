@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import type { FurnitureItem, PlacedFurniture } from '../types/furniture';
+import type { FurnitureItem, PlacedFurniture, StatKey } from '../types/furniture';
 import { getRoomConfig, isAtticCellValid, ATTIC_INDEX } from '../types/furniture';
-import { presetScore, autoPopulateRoom } from './autoPopulate';
+import { statScore, autoPopulateRoom } from './autoPopulate';
 
 function makeItem(over: Partial<FurnitureItem> & { name: string }): FurnitureItem {
   const shape = over.shape ?? [[2]];
@@ -26,26 +26,24 @@ function makeItem(over: Partial<FurnitureItem> & { name: string }): FurnitureIte
   };
 }
 
-describe('presetScore', () => {
-  const item = makeItem({ name: 'x', comfort: 2, stimulation: 3, health: 1, mutation: 4 });
+describe('statScore', () => {
+  const item = makeItem({ name: 'x', appeal: 1, comfort: 2, stimulation: 3, health: 1, mutation: 4 });
 
-  it('breeding = comfort + stimulation', () => {
-    expect(presetScore(item, 'breeding')).toBe(5);
+  it('sums only the selected stats', () => {
+    expect(statScore(item, ['comfort', 'stimulation'])).toBe(5);
+    expect(statScore(item, ['appeal'])).toBe(1);
+    expect(statScore(item, ['health', 'mutation'])).toBe(5);
   });
 
-  it('storage = 0.5*comfort + health - stimulation', () => {
-    expect(presetScore(item, 'storage')).toBe(2 * 0.5 + 1 - 3); // -1
-  });
-
-  it('mutation = 0.5*comfort + mutation', () => {
-    expect(presetScore(item, 'mutation')).toBe(5);
+  it('empty selection scores zero', () => {
+    expect(statScore(item, [])).toBe(0);
   });
 });
 
 function makeOpts(over: Partial<Parameters<typeof autoPopulateRoom>[0]>) {
   let n = 0;
   return {
-    preset: 'breeding' as const,
+    stats: ['comfort', 'stimulation'] as StatKey[],
     roomIndex: 0,
     allFurniture: [],
     ownership: {},
@@ -82,8 +80,8 @@ describe('autoPopulateRoom', () => {
     expect(result).toHaveLength(3);
   });
 
-  it('never places items with score <= 0', () => {
-    const junk = makeItem({ name: 'junk', appeal: 5, shape: [[2]] }); // breeding score 0
+  it('never places items with score <= 0 for the selected stats', () => {
+    const junk = makeItem({ name: 'junk', appeal: 5, shape: [[2]] }); // appeal not selected
     const result = autoPopulateRoom(makeOpts({
       allFurniture: [junk],
       ownership: { junk: 10 },
@@ -124,11 +122,11 @@ describe('autoPopulateRoom', () => {
     expect(result[0].item.name).toBe('good');
   });
 
-  it('storage preset rejects net-negative stimulation items', () => {
-    const stimToy = makeItem({ name: 'toy', comfort: 2, stimulation: 3, shape: [[2]] }); // storage: 1 - 3 < 0
-    const bed = makeItem({ name: 'bed', comfort: 2, health: 1, shape: [[2]] }); // storage: 2
+  it('unselected stats do not contribute to placement', () => {
+    const stimToy = makeItem({ name: 'toy', stimulation: 3, shape: [[2]] });
+    const bed = makeItem({ name: 'bed', comfort: 2, shape: [[2]] });
     const result = autoPopulateRoom(makeOpts({
-      preset: 'storage',
+      stats: ['comfort'] as StatKey[],
       allFurniture: [stimToy, bed],
       ownership: { toy: 5, bed: 1 },
     }));
@@ -166,7 +164,7 @@ describe('autoPopulateRoom', () => {
     const maxA = autoPopulateRoom(makeOpts({ ...pool, algorithm: 'maximize', seed: 42, iterations: 30 }));
     const maxB = autoPopulateRoom(makeOpts({ ...pool, algorithm: 'maximize', seed: 42, iterations: 30 }));
 
-    const score = (r: PlacedFurniture[]) => r.reduce((s, p) => s + presetScore(p.item, 'breeding'), 0);
+    const score = (r: PlacedFurniture[]) => r.reduce((s, p) => s + statScore(p.item, ['comfort', 'stimulation']), 0);
 
     // never worse than greedy baseline
     expect(score(maxA)).toBeGreaterThanOrEqual(score(greedy));

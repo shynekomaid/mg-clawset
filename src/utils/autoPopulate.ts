@@ -3,18 +3,16 @@ import { getRoomConfig } from '../types/furniture';
 import { buildOccupancy, buildAnchorPointSet, canPlace } from './gridHelpers';
 import { findAnchoredPieces } from './anchorHelpers';
 
-export type PresetKey = 'breeding' | 'storage' | 'mutation';
 export type AlgorithmKey = 'greedy' | 'maximize';
 
-export interface PresetDef {
-  label: string;
-  weights: Partial<Record<StatKey, number>>;
-}
+export const ALL_STATS: StatKey[] = ['appeal', 'comfort', 'stimulation', 'health', 'mutation'];
 
-export const PRESETS: Record<PresetKey, PresetDef> = {
-  breeding: { label: 'Breeding', weights: { comfort: 1.0, stimulation: 1.0 } },
-  storage: { label: 'Storage', weights: { comfort: 0.5, health: 1.0, stimulation: -1.0 } },
-  mutation: { label: 'Mutation', weights: { comfort: 0.5, mutation: 1.0 } },
+export const STAT_LABELS: Record<StatKey, string> = {
+  appeal: 'Appeal',
+  comfort: 'Comfort',
+  stimulation: 'Stimulation',
+  health: 'Health',
+  mutation: 'Mutation',
 };
 
 export const ALGORITHMS: Record<AlgorithmKey, { label: string; description: string }> = {
@@ -22,16 +20,15 @@ export const ALGORITHMS: Record<AlgorithmKey, { label: string; description: stri
   maximize: { label: 'Maximize', description: 'Randomized search — tries many layouts, keeps the best (~0.5s)' },
 };
 
-export function presetScore(item: FurnitureItem, preset: PresetKey): number {
+export function statScore(item: FurnitureItem, stats: StatKey[]): number {
   let score = 0;
-  for (const [stat, weight] of Object.entries(PRESETS[preset].weights)) {
-    score += item[stat as StatKey] * weight;
-  }
+  for (const stat of stats) score += item[stat];
   return score;
 }
 
 export interface AutoPopulateOptions {
-  preset: PresetKey;
+  /** Stats to maximize; items are scored by the sum of the selected stats. */
+  stats: StatKey[];
   roomIndex: number;
   allFurniture: FurnitureItem[];
   ownership: Record<string, number>;
@@ -70,12 +67,12 @@ interface ScanMode {
 }
 
 function buildCandidates(opts: AutoPopulateOptions): Candidate[] {
-  const { preset, allFurniture, ownership, usedInOtherRooms } = opts;
+  const { stats, allFurniture, ownership, usedInOtherRooms } = opts;
   const candidates: Candidate[] = [];
   for (const item of allFurniture) {
     const remaining = (ownership[item.id] ?? 0) - (usedInOtherRooms[item.id] ?? 0);
     if (remaining <= 0) continue;
-    const score = presetScore(item, preset);
+    const score = statScore(item, stats);
     if (score <= 0) continue;
     candidates.push({ item, score, remaining });
   }
@@ -170,9 +167,9 @@ function fillGreedy(
   return placed;
 }
 
-function totalScore(placed: PlacedFurniture[], preset: PresetKey): number {
+function totalScore(placed: PlacedFurniture[], stats: StatKey[]): number {
   let sum = 0;
-  for (const p of placed) sum += presetScore(p.item, preset);
+  for (const p of placed) sum += statScore(p.item, stats);
   return sum;
 }
 
@@ -223,10 +220,10 @@ function runMaximize(opts: AutoPopulateOptions, cfg: RoomConfig): PlacedFurnitur
     layout.reduce((s, p) => s + p.item.spacesOccupied, 0);
 
   let best = runGreedy(opts, cfg); // deterministic baseline
-  let bestScore = totalScore(best, opts.preset);
+  let bestScore = totalScore(best, opts.stats);
 
   const consider = (layout: PlacedFurniture[]) => {
-    const score = totalScore(layout, opts.preset);
+    const score = totalScore(layout, opts.stats);
     if (score > bestScore || (score === bestScore && cellsUsed(layout) > cellsUsed(best))) {
       best = layout;
       bestScore = score;
