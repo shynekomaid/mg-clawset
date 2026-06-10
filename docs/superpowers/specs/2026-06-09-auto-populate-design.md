@@ -168,3 +168,22 @@ User feedback: presets too generic; controls felt disconnected.
   Mewgenics.
 - New "Focus" mode: hides the furniture browser entirely (full-width
   designer) for playing alongside the game; "Exit focus" restores it.
+
+## Addendum (2026-06-10, #2): Room-first layout redesign
+
+User feedback: UI was browser-first with the USP (room filler) hidden in a
+side panel; welcome modal was a text wall with buried actions.
+
+- First run: minimal **hero screen** — logo, one-line pitch, primary
+  "Load savegame", secondary "Browse without a save". Shown once
+  (`mg-clawset-hero-seen`). All how-to text lives behind the cat icon.
+- New persistent **header bar**: cat mascot (help), title, always-visible
+  "Load / Re-load savegame" button.
+- **Room designer is the main view** on desktop, always visible.
+- **Furniture browser demoted to a collapsible left drawer** (~460px,
+  compact cards). Defaults: open with full catalog when no ownership
+  (theorycrafters); closed with "Owned" filter active when a collection
+  exists. Toggled via "◂ Furniture" in the designer or the edge arrow.
+- "Focus" mode removed — closing the drawer is the same thing.
+- Mobile keeps the original browser-only experience (designer needs
+  drag-and-drop); the one-time welcome modal still auto-opens there.

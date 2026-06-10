@@ -22,7 +22,7 @@ function detectAdblock(): Promise<boolean> {
   });
 }
 
-const CatSVG = ({ size }: { size: number }) => (
+export const CatSVG = ({ size }: { size: number }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" style={{ width: size, height: size, flexShrink: 0, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))', cursor: 'pointer' }}>
     <polygon points="15,20 85,20 75,0 25,0" fill="#C28F5A" />
     <polygon points="15,20 85,20 85,50 15,50" fill="#8C6239" />
@@ -158,7 +158,7 @@ interface Props {
 }
 
 export default function CatMascot({ compact, isMobile, onLoadSavegame }: Props) {
-  const [helpOpen, setHelpOpen] = useState(() => !localStorage.getItem(WELCOME_SEEN_KEY));
+  const [helpOpen, setHelpOpen] = useState(() => (isMobile ? !localStorage.getItem(WELCOME_SEEN_KEY) : false));
   const [helpVisible, setHelpVisible] = useState(false); // for animation
   const [helpDismissed, setHelpDismissed] = useState(false);
   const [adblockBubble, setAdblockBubble] = useState(false);

@@ -34,7 +34,7 @@ export default function ViewToggleButton({ expanded, onClick }: Props) {
     <button
       style={styles.button}
       onClick={onClick}
-      title={expanded ? 'Collapse to full list' : 'Open room designer'}
+      title={expanded ? 'Hide furniture list' : 'Show furniture list'}
     >
       {expanded ? '▶' : '◀'}
     </button>

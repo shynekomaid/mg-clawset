@@ -36,14 +36,14 @@ interface Props {
   onImportRooms: (entries: RoomExportEntry[][]) => void;
   onAutoPopulate: (stats: StatKey[], algorithm: AlgorithmKey) => void;
   ownership: Record<string, number>;
-  focusMode: boolean;
-  onToggleFocusMode: () => void;
+  drawerOpen: boolean;
+  onToggleDrawer: () => void;
 }
 
 export default function RoomDesignerWorkspace({
   visible, placed, rooms, activeRoom, onActiveRoomChange,
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
-  focusMode, onToggleFocusMode,
+  drawerOpen, onToggleDrawer,
 }: Props) {
   const [expertView, setExpertView] = useState(false);
   const [autoFillOpen, setAutoFillOpen] = useState(false);
@@ -218,11 +218,11 @@ export default function RoomDesignerWorkspace({
             Checklist
           </button>
           <button
-            style={{ ...smallBtn, ...(focusMode ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
-            onClick={onToggleFocusMode}
-            title={focusMode ? 'Show the furniture browser again' : 'Hide the furniture browser — compact view for playing alongside the game'}
+            style={{ ...smallBtn, ...(drawerOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
+            onClick={onToggleDrawer}
+            title={drawerOpen ? 'Hide the furniture list' : 'Show the furniture list to browse and drag items manually'}
           >
-            {focusMode ? 'Exit focus' : 'Focus'}
+            {drawerOpen ? 'Hide furniture' : '◂ Furniture'}
           </button>
           <button style={toggleBtn} onClick={() => setExpertView((v) => !v)}>
             {expertView ? 'Image View' : 'Expert View'}

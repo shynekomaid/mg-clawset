@@ -7,6 +7,8 @@ import SplitScreenContainer from './components/SplitScreenContainer';
 import FurnitureBrowser from './components/FurnitureBrowser';
 import RoomDesignerWorkspace from './components/RoomDesignerWorkspace';
 import SaveImportModal from './components/SaveImportModal';
+import AppHeader from './components/AppHeader';
+import WelcomeHero from './components/WelcomeHero';
 import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/anchorHelpers';
 import { autoPopulateRoom } from './utils/autoPopulate';
 import type { AlgorithmKey } from './utils/autoPopulate';
@@ -59,6 +61,8 @@ for (const item of allFurniture) {
     }
   }
 }
+
+const HERO_SEEN_KEY = 'mg-clawset-hero-seen';
 
 const defaultFilters: Filters = {
   name: '',
@@ -144,23 +148,27 @@ const layoutStyles: Record<string, CSSProperties> = {
 
 function App() {
   const isMobile = useIsMobile();
-  const [filters, setFilters] = useState<Filters>(defaultFilters);
-  const [sort, setSort] = useState<SortConfig>(defaultSort);
   const [ownership, setOwnership] = useState<Record<string, number>>(loadOwnership);
-  const [expanded, setExpanded] = useState(true);
+  const hasOwnership = Object.keys(ownership).length > 0;
+  const [filters, setFilters] = useState<Filters>(
+    () => ({ ...defaultFilters, onlyOwned: Object.keys(loadOwnership()).length > 0 }),
+  );
+  const [sort, setSort] = useState<SortConfig>(defaultSort);
+  // Drawer starts open only for users without a collection (theorycrafting)
+  const [drawerOpen, setDrawerOpen] = useState(() => Object.keys(loadOwnership()).length === 0);
+  const [heroSeen, setHeroSeen] = useState(() => !!localStorage.getItem(HERO_SEEN_KEY));
   const [page, setPage] = useState(0);
   const [rooms, setRooms] = useState<PlacedFurniture[][]>(loadRooms);
   const [activeRoom, setActiveRoom] = useState(ATTIC_INDEX);
   const [importModalOpen, setImportModalOpen] = useState(false);
-  const [focusMode, setFocusMode] = useState(false);
   const [statsPerSpace, setStatsPerSpace] = useState(false);
 
   const placed = rooms[activeRoom];
 
-  // Force collapse room designer on mobile
-  useEffect(() => {
-    if (isMobile && expanded) setExpanded(false);
-  }, [isMobile, expanded]);
+  const dismissHero = useCallback(() => {
+    setHeroSeen(true);
+    localStorage.setItem(HERO_SEEN_KEY, '1');
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(ownership));
@@ -291,6 +299,11 @@ function App() {
     setFilters((prev) => ({ ...prev, onlyOwned: true }));
   }, []);
 
+  const openImportModal = useCallback(() => {
+    dismissHero();
+    setImportModalOpen(true);
+  }, [dismissHero]);
+
   const handleImportRooms = useCallback((allEntries: { id: string; row: number; col: number }[][]) => {
     const furnitureById = new Map(allFurniture.map(f => [f.id, f]));
     const newRooms: PlacedFurniture[][] = allEntries.map(entries => {
@@ -420,14 +433,23 @@ function App() {
   return (
     <div style={{
       ...layoutStyles.main,
+      display: 'flex',
+      flexDirection: 'column',
       ...(isMobile ? { height: 'auto', minHeight: '100vh', overflow: 'visible' } : {}),
     }}>
+      {!isMobile && !heroSeen && (
+        <WelcomeHero onLoadSavegame={openImportModal} onBrowse={dismissHero} />
+      )}
+      {!isMobile && (
+        <AppHeader onLoadSavegame={openImportModal} hasOwnership={hasOwnership} />
+      )}
+      <div style={{ flex: 1, minHeight: 0 }}>
       <SplitScreenContainer>
         <div
           style={{
             ...layoutStyles.browserWrapper,
-            width: isMobile ? '100%' : focusMode && expanded ? '0%' : expanded ? '45%' : 'calc(100% - 24px)',
-            ...(focusMode && expanded && !isMobile ? { overflow: 'hidden', opacity: 0, pointerEvents: 'none' as const } : {}),
+            width: isMobile ? '100%' : drawerOpen ? 'min(460px, 42%)' : '0%',
+            ...(!drawerOpen && !isMobile ? { overflow: 'hidden', opacity: 0, pointerEvents: 'none' as const } : {}),
             ...(isMobile ? { height: 'auto', overflow: 'visible', transition: 'none', position: 'static' as const } : {}),
           }}
         >
@@ -441,12 +463,12 @@ function App() {
             onSortChange={handleSortChange}
             onIncrement={handleIncrement}
             onDecrement={handleDecrement}
-            expanded={expanded}
-            onToggle={() => setExpanded((prev) => !prev)}
+            expanded={!isMobile}
+            onToggle={() => setDrawerOpen((prev) => !prev)}
             page={clampedPage}
             totalPages={totalPages}
             onPageChange={setPage}
-            onImportClick={() => setImportModalOpen(true)}
+            onImportClick={openImportModal}
             isMobile={isMobile}
             statsPerSpace={statsPerSpace}
             onStatsPerSpaceChange={setStatsPerSpace}
@@ -455,7 +477,7 @@ function App() {
         </div>
         {!isMobile && (
           <RoomDesignerWorkspace
-            visible={expanded}
+            visible
             placed={placed}
             rooms={rooms}
             activeRoom={activeRoom}
@@ -466,11 +488,12 @@ function App() {
             onImportRooms={handleImportRooms}
             onAutoPopulate={handleAutoPopulate}
             ownership={ownership}
-            focusMode={focusMode}
-            onToggleFocusMode={() => setFocusMode((v) => !v)}
+            drawerOpen={drawerOpen}
+            onToggleDrawer={() => setDrawerOpen((v) => !v)}
           />
         )}
       </SplitScreenContainer>
+      </div>
       <SaveImportModal
         open={importModalOpen}
         onClose={() => setImportModalOpen(false)}
