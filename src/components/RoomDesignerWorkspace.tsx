@@ -612,23 +612,6 @@ export default function RoomDesignerWorkspace({
           )}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
             <button
-              style={{ ...smallBtn, opacity: onUndo ? 1 : 0.4, cursor: onUndo ? 'pointer' : 'not-allowed', padding: '5px 12px' }}
-              disabled={!onUndo}
-              onClick={onUndo}
-              title="Undo room change (Ctrl+Z)"
-            >
-              ↶ Undo
-            </button>
-            <button
-              style={{ ...smallBtn, opacity: onRedo ? 1 : 0.4, cursor: onRedo ? 'pointer' : 'not-allowed', padding: '5px 12px' }}
-              disabled={!onRedo}
-              onClick={onRedo}
-              title="Redo room change (Ctrl+Y)"
-            >
-              ↷ Redo
-            </button>
-            <span style={{ width: 1, height: 18, background: 'var(--border)' }} />
-            <button
               style={{ ...smallBtn, ...(checklistOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
               onClick={() => setChecklistOpen((v) => !v)}
               title="Tick off this room's items while placing them in the game"
@@ -695,6 +678,38 @@ export default function RoomDesignerWorkspace({
             onHoverItem={handleHoverItem}
           />
         )}
+        {/* Floating undo/redo over the room viewer */}
+        <div style={{ position: 'absolute', top: 36, right: 8, display: 'flex', gap: 6, zIndex: 50 }}>
+          {([
+            { fn: onUndo, label: '↶', tip: 'Undo room change (Ctrl+Z)' },
+            { fn: onRedo, label: '↷', tip: 'Redo room change (Ctrl+Y)' },
+          ] as const).map((b) => (
+            <button
+              key={b.tip}
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                border: '1px solid var(--border)',
+                background: 'var(--bg)',
+                color: b.fn ? 'var(--text-h)' : 'var(--text-m)',
+                fontSize: 17,
+                fontFamily: 'var(--font)',
+                cursor: b.fn ? 'pointer' : 'not-allowed',
+                opacity: b.fn ? 0.95 : 0.45,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              disabled={!b.fn}
+              onClick={b.fn}
+              title={b.tip}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
         {hoverTip && (
           <div style={{
             position: 'absolute',
