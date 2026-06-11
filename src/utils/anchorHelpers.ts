@@ -99,6 +99,34 @@ export function findAnchoredPieces(targetId: string, placed: PlacedFurniture[], 
         }
       }
     }
+
+    // Anchorless pieces resting on anchor points (attic rule) fall too
+    if (config?.looseItemsNeedSupport) {
+      const liveAPs = new Set<string>();
+      for (const other of placed) {
+        if (toRemove.has(other.instanceId)) continue;
+        for (const ap of getAnchorPointCells(other)) liveAPs.add(ap);
+      }
+      for (const p of placed) {
+        if (toRemove.has(p.instanceId)) continue;
+        if (getAnchorCells(p).size > 0) continue;
+        let maxR = -1;
+        p.item.shape.forEach((row, r) => row.forEach((t) => {
+          if ((t === 2 || t === 3) && r > maxR) maxR = r;
+        }));
+        if (maxR < 0) continue;
+        let supported = false;
+        p.item.shape[maxR].forEach((t, c) => {
+          if (t !== 2 && t !== 3) return;
+          const below = p.row + maxR + 1;
+          if (below >= rows || liveAPs.has(`${below},${p.col + c}`)) supported = true;
+        });
+        if (!supported) {
+          toRemove.add(p.instanceId);
+          changed = true;
+        }
+      }
+    }
   }
   toRemove.delete(targetId);
   return toRemove;

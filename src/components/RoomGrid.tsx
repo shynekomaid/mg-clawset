@@ -341,10 +341,6 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
               display: 'flex',
               alignItems: anchorAlign === 'bottom' ? 'flex-end' : anchorAlign === 'top' ? 'flex-start' : 'center',
               justifyContent: 'center',
-              outline: isHovered ? '2px solid var(--accent)' : 'none',
-              outlineOffset: 1,
-              borderRadius: 4,
-              background: isHovered ? 'rgba(193,73,83,0.12)' : 'transparent',
             }}
             title={`${p.item.name} \u2014 drag to move \u00b7 click for checklist \u00b7 right-click to remove`}
             onClick={(e) => {
@@ -483,6 +479,35 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
         }),
       )}
       {imageOverlays}
+      {/* Hovered item: highlight its actual solid cells (bounding boxes lie for L/T shapes) */}
+      {hoverItemId && placed.filter((p) => p.item.id === hoverItemId).map((p) =>
+        p.item.shape.flatMap((shapeRow, r) =>
+          shapeRow.map((t, c) => {
+            if (t !== 2 && t !== 3) return null;
+            const gr = p.row + r;
+            const gc = p.col + c;
+            if (gr < 0 || gr >= rows || gc < 0 || gc >= cols) return null;
+            return (
+              <div
+                key={`hl-${p.instanceId}-${r}-${c}`}
+                style={{
+                  position: 'absolute',
+                  left: `${(gc / cols) * 100}%`,
+                  top: `${(gr / rows) * 100}%`,
+                  width: `${(1 / cols) * 100}%`,
+                  height: `${(1 / rows) * 100}%`,
+                  background: 'rgba(193,73,83,0.18)',
+                  boxShadow: 'inset 0 0 0 2px var(--accent)',
+                  borderRadius: 3,
+                  zIndex: 5,
+                  pointerEvents: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+            );
+          }),
+        ),
+      )}
       {labelOverlays}
       {expertDragOverlays}
       {/* Hover highlight overlay */}

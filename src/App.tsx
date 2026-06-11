@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import type { Filters, SortConfig, SortField, FurnitureItem, RawFurnitureItem, PlacedFurniture } from './types/furniture';
 import { getRoomConfig, ATTIC_INDEX, HOUSE_VIEW } from './types/furniture';
@@ -216,9 +216,61 @@ function App() {
     localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(rooms));
   }, [rooms]);
 
+  // Undo/redo: every room mutation goes through updateRooms, which snapshots
+  // the previous state (rooms arrays are immutable, so references suffice).
+  const historyRef = useRef<{ past: PlacedFurniture[][][]; future: PlacedFurniture[][][] }>({ past: [], future: [] });
+  const [histVersion, setHistVersion] = useState(0);
+  const updateRooms = useCallback((next: PlacedFurniture[][] | ((prev: PlacedFurniture[][]) => PlacedFurniture[][])) => {
+    setRooms((prev) => {
+      const value = typeof next === 'function' ? next(prev) : next;
+      if (value === prev) return prev;
+      const h = historyRef.current;
+      h.past.push(prev);
+      if (h.past.length > 100) h.past.shift();
+      h.future = [];
+      return value;
+    });
+    setHistVersion((v) => v + 1);
+  }, []);
+  const undo = useCallback(() => {
+    setRooms((prev) => {
+      const h = historyRef.current;
+      const last = h.past.pop();
+      if (!last) return prev;
+      h.future.push(prev);
+      return last;
+    });
+    setHistVersion((v) => v + 1);
+  }, []);
+  const redo = useCallback(() => {
+    setRooms((prev) => {
+      const h = historyRef.current;
+      const next = h.future.pop();
+      if (!next) return prev;
+      h.past.push(prev);
+      return next;
+    });
+    setHistVersion((v) => v + 1);
+  }, []);
+  void histVersion; // state only forces re-render so canUndo/canRedo stay fresh
+  const canUndo = historyRef.current.past.length > 0;
+  const canRedo = historyRef.current.future.length > 0;
+
+  // Ctrl+Z / Ctrl+Y (and Ctrl+Shift+Z) anywhere outside text inputs
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA')) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
+
   const updateActiveRoom = useCallback((updater: (prev: PlacedFurniture[]) => PlacedFurniture[]) => {
-    setRooms(prev => prev.map((room, i) => i === activeRoom ? updater(room) : room));
-  }, [activeRoom]);
+    updateRooms(prev => prev.map((room, i) => i === activeRoom ? updater(room) : room));
+  }, [activeRoom, updateRooms]);
 
   const handlePlaceFurniture = useCallback((item: FurnitureItem, row: number, col: number) => {
     const instanceId = `placed-${nextInstanceId++}`;
@@ -364,7 +416,7 @@ function App() {
         window.alert('Nothing to place: no owned furniture with remaining copies scores positively for the selected stats.');
         return;
       }
-      setRooms(newRooms);
+      updateRooms(newRooms);
       const pct = upperScore > 0 ? Math.round((achievedScore / upperScore) * 100) : 100;
       setFillReport(
         `Score ${achievedScore} \u2014 ${pct}% of the theoretical max (every scoring copy placed, space ignored) \u00b7 ${cellsUsed}/${capacity} cells used`,
@@ -413,7 +465,7 @@ function App() {
           col: p.col,
         }));
       }
-      setRooms(newRooms);
+      updateRooms(newRooms);
       setActiveRoom(HOUSE_VIEW);
     }
   }, []);
@@ -461,7 +513,7 @@ function App() {
       return room;
     });
     while (newRooms.length < NUM_ROOMS) newRooms.push([]);
-    setRooms(newRooms);
+    updateRooms(newRooms);
     setActiveRoom(0);
   }, []);
 
@@ -642,6 +694,8 @@ function App() {
             foodBox={foodBoxItem && (ownership[foodBoxItem.id] || 0) > 0 ? foodBoxItem : null}
             fillProgress={fillProgress}
             fillReport={fillReport}
+            onUndo={canUndo ? undo : undefined}
+            onRedo={canRedo ? redo : undefined}
           />
         )}
         <div

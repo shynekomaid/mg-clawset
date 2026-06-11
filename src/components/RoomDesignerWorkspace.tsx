@@ -81,12 +81,15 @@ interface Props {
   fillProgress?: number | null;
   /** Quality summary of the last auto-fill. */
   fillReport?: string | null;
+  /** Undo/redo for room mutations; undefined = nothing to un/redo. */
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 export default function RoomDesignerWorkspace({
   visible, placed, rooms, activeRoom, onActiveRoomChange,
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
-  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox, fillProgress = null, fillReport = null,
+  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox, fillProgress = null, fillReport = null, onUndo, onRedo,
 }: Props) {
   const [expertView, setExpertView] = useState(false);
   const [presetKey, setPresetKey] = useState<FillPresetKey | 'custom'>('breeding');
@@ -608,6 +611,23 @@ export default function RoomDesignerWorkspace({
             </div>
           )}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
+            <button
+              style={{ ...smallBtn, opacity: onUndo ? 1 : 0.4, cursor: onUndo ? 'pointer' : 'not-allowed', padding: '5px 12px' }}
+              disabled={!onUndo}
+              onClick={onUndo}
+              title="Undo room change (Ctrl+Z)"
+            >
+              ↶ Undo
+            </button>
+            <button
+              style={{ ...smallBtn, opacity: onRedo ? 1 : 0.4, cursor: onRedo ? 'pointer' : 'not-allowed', padding: '5px 12px' }}
+              disabled={!onRedo}
+              onClick={onRedo}
+              title="Redo room change (Ctrl+Y)"
+            >
+              ↷ Redo
+            </button>
+            <span style={{ width: 1, height: 18, background: 'var(--border)' }} />
             <button
               style={{ ...smallBtn, ...(checklistOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
               onClick={() => setChecklistOpen((v) => !v)}

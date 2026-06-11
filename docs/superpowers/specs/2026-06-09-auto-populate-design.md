@@ -444,3 +444,21 @@ toggles in house view, locked rooms preserved. 31 unit tests pass.
   with no optimality proof; the report makes "how close?" visible. 100%
   means provably optimal item selection; high 90s mean the room ran out of
   space, not the search out of ideas.
+
+## Addendum (2026-06-11, #16): Attic float rule, undo/redo, per-cell hover
+
+- **Attic floating fixed.** Anchorless (wallmounted) items were placed
+  mid-air along the attic slope by the auto-fill — regular rooms have a
+  back wall, the attic does not. New `looseItemsNeedSupport` room rule:
+  in the attic an anchorless item needs the floor or an anchor point under
+  its bottom row (plain solids give no grip). Ruin-and-recreate's cascade
+  now also drops loose items whose support it removed (was the source of
+  the remaining floaters, e.g. the floating IV).
+- **Undo/redo.** Every room mutation (place, move, right-click remove,
+  auto-fill, import) snapshots into a 100-step history. Undo/redo buttons
+  in the panel + Ctrl+Z / Ctrl+Y (Ctrl+Shift+Z) shortcuts.
+- **Per-cell hover highlight.** The hover focus no longer draws a rectangle
+  over the piece's bounding box (which visually swallowed smaller items in
+  the notches of L/T-shaped pieces); only the actual solid cells get the
+  accent outline. Combined with cell-accurate pointer events, tetris-style
+  pieces no longer block or obscure their neighbours.

@@ -83,6 +83,31 @@ export function canPlace(
       }
     }
   }
+
+  if (cfg.looseItemsNeedSupport) {
+    // anchorless items may not float in this room: at least one cell
+    // directly below the bottom solid row must be floor or occupied
+    let hasAnchor = false;
+    let maxR = -1;
+    for (let r = 0; r < shape.length; r++) {
+      for (let c = 0; c < shape[r].length; c++) {
+        if (shape[r][c] === 4) hasAnchor = true;
+        if ((shape[r][c] === 2 || shape[r][c] === 3) && r > maxR) maxR = r;
+      }
+    }
+    if (!hasAnchor && maxR >= 0) {
+      let supported = false;
+      for (let c = 0; c < shape[maxR].length; c++) {
+        if (shape[maxR][c] !== 2 && shape[maxR][c] !== 3) continue;
+        const below = row + maxR + 1;
+        const gc = col + c;
+        if (below >= cfg.rows) { supported = true; break; }
+        // resting on an anchor point is fine; plain solids give no grip
+        if (anchorPointSet.has(`${below},${gc}`)) { supported = true; break; }
+      }
+      if (!supported) return false;
+    }
+  }
   return true;
 }
 

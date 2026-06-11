@@ -330,14 +330,33 @@ describe('autoPopulateRoom', () => {
     }));
     expect(noSupport).toEqual([]);
 
-    // with an anchor-point provider placed first, the hanging item attaches
-    const shelf = makeItem({ name: 'shelf', comfort: 1, shape: [[3]] });
+    // with a floor-standing anchor-point provider, the hanging item attaches
+    // (AP sits atop the stand with a free cell beneath it for the hanger)
+    const shelf = makeItem({ name: 'shelf', comfort: 1, shape: [[3, 1], [1, 2], [1, 2]] });
     const withSupport = autoPopulateRoom(makeOpts({
       roomIndex: ATTIC_INDEX,
       allFurniture: [hanging, shelf],
       ownership: { hanging: 1, shelf: 1 },
     }));
     expect(withSupport.map(p => p.item.name).sort()).toEqual(['hanging', 'shelf']);
+  });
+
+  it('anchorless items cannot float in the attic but may rest on the floor', () => {
+    const picture = makeItem({ name: 'picture', comfort: 5, shape: [[2]] });
+    const inAttic = autoPopulateRoom(makeOpts({
+      roomIndex: ATTIC_INDEX,
+      allFurniture: [picture],
+      ownership: { picture: 60 },
+    }));
+    // attic floor row holds 31 cells; without wall support nothing stacks higher
+    expect(inAttic.length).toBeGreaterThan(0);
+    for (const p of inAttic) expect(p.row).toBe(7);
+    // regular rooms have a back wall: free placement everywhere
+    const inRoom = autoPopulateRoom(makeOpts({
+      allFurniture: [picture],
+      ownership: { picture: 200 },
+    }));
+    expect(inRoom.length).toBe(16 * 7);
   });
 
   it('fillers never displace scoring items', () => {
