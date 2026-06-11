@@ -342,10 +342,7 @@ function App() {
     });
   }, [updateActiveRoom, activeRoom]);
 
-  const ownedIdols = useMemo(
-    () => idolItems.filter((it) => (ownership[it.id] || 0) > 0),
-    [ownership],
-  );
+
 
   const handleAutoPopulate = useCallback(async (config: {
     algorithm: AlgorithmKey;
@@ -690,7 +687,7 @@ function App() {
             drawerOpen={drawerOpen}
             onToggleDrawer={() => setDrawerOpen((v) => !v)}
             isRoomUnlocked={isRoomUnlocked}
-            idols={ownedIdols}
+            idols={idolItems}
             foodBox={foodBoxItem && (ownership[foodBoxItem.id] || 0) > 0 ? foodBoxItem : null}
             fillProgress={fillProgress}
             fillReport={fillReport}

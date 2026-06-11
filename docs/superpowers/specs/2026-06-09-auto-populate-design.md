@@ -462,3 +462,13 @@ toggles in house view, locked rooms preserved. 31 unit tests pass.
   the notches of L/T-shaped pieces); only the actual solid cells get the
   accent outline. Combined with cell-accurate pointer events, tetris-style
   pieces no longer block or obscure their neighbours.
+
+## Addendum (2026-06-11, #17): Full idol list in the auto-fill panel
+
+The panel now lists all seven special idols from the wiki's Special
+Furniture set (Comfort, Stimulation, Health, Evolution, Appeal, Chastity,
+Chaos) instead of only owned ones. Unowned idols render disabled with a
+"Not purchased — <effect>" tooltip; owned ones behave as before. Stat
+idols without a curated note derive their tooltip from their stats
+("Stat idol (+5 Comfort)"). The Storage preset's automatic Idol of
+Chastity selection now checks ownership before selecting/forcing it.

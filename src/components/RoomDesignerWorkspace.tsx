@@ -73,7 +73,7 @@ interface Props {
   drawerOpen: boolean;
   onToggleDrawer: () => void;
   isRoomUnlocked: (i: number) => boolean;
-  /** Owned special idols selectable for forced placement. */
+  /** All special idols; unowned ones render disabled. */
   idols: FurnitureItem[];
   /** Owned food box item (null when none owned). */
   foodBox: FurnitureItem | null;
@@ -198,7 +198,7 @@ export default function RoomDesignerWorkspace({
     setPresetKey(key);
     setStatWeights({ ...EMPTY_WEIGHTS, ...preset.tristate });
     if (preset.autoIdolKey) {
-      const idol = idols.find((i) => i.image_url.includes(preset.autoIdolKey!));
+      const idol = idols.find((i) => i.image_url.includes(preset.autoIdolKey!) && (ownership[i.id] || 0) > 0);
       if (idol) setSelectedIdols((prev) => new Set(prev).add(idol.id));
     }
   };
@@ -260,7 +260,7 @@ export default function RoomDesignerWorkspace({
       }
       const preset = FILL_PRESETS[choice];
       const autoIdol = preset.autoIdolKey
-        ? idols.find((i) => i.image_url.includes(preset.autoIdolKey!))
+        ? idols.find((i) => i.image_url.includes(preset.autoIdolKey!) && (ownership[i.id] || 0) > 0)
         : undefined;
       plans.push({
         roomIndex: ri,
@@ -343,7 +343,12 @@ export default function RoomDesignerWorkspace({
   };
   const idolNote = (item: FurnitureItem): string => {
     const key = Object.keys(IDOL_NOTES).find((k) => item.image_url.includes(k));
-    return key ? IDOL_NOTES[key] : 'Stat idol';
+    if (key) return IDOL_NOTES[key];
+    const stats = ALL_STATS
+      .filter((st) => item[st] !== 0)
+      .map((st) => `${item[st] > 0 ? '+' : ''}${item[st]} ${STAT_LABELS[st]}`)
+      .join(', ');
+    return stats ? `Stat idol (${stats})` : 'Stat idol';
   };
 
   const containerStyle: CSSProperties = {
@@ -592,16 +597,32 @@ export default function RoomDesignerWorkspace({
                   />
                   Include food storage
                 </label>
-                {idols.map((idol) => (
-                  <label key={idol.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }} title={idolNote(idol)}>
-                    <input
-                      type="checkbox"
-                      checked={selectedIdols.has(idol.id)}
-                      onChange={() => toggleIdol(idol.id)}
-                    />
-                    {idol.name}
-                  </label>
-                ))}
+                {idols.map((idol) => {
+                  const owned = (ownership[idol.id] || 0) > 0;
+                  return (
+                    <label
+                      key={idol.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        fontSize: 12,
+                        color: owned ? 'var(--text)' : 'var(--text-m)',
+                        cursor: owned ? 'pointer' : 'not-allowed',
+                        opacity: owned ? 1 : 0.55,
+                      }}
+                      title={owned ? idolNote(idol) : `Not purchased \u2014 ${idolNote(idol)}`}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={!owned}
+                        checked={owned && selectedIdols.has(idol.id)}
+                        onChange={() => toggleIdol(idol.id)}
+                      />
+                      {idol.name}
+                    </label>
+                  );
+                })}
               </div>
             </>
           )}
