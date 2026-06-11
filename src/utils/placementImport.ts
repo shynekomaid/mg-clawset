@@ -86,21 +86,16 @@ export function applyRoomPlacements(
       // keep stacked items above the room (negative rows) inside the grid
       if (row0 + minR < 0) row0 = -minR;
 
-      const supportedAt = (r0: number, slack: number) =>
+      const supportedAt = (r0: number) =>
         anchors.some(([ar, ac]) => {
           const r = r0 + ar;
           if (r >= cfg.rows) return true; // resting on the floor
-          for (let d = -slack; d <= slack; d++) {
-            if (occupied.has(`${r},${col0 + ac + d}`)) return true;
-          }
-          return false;
+          return occupied.has(`${r},${col0 + ac}`);
         });
 
-      // adjacent-column support is good enough to stay put, but while
-      // falling only an exact landing or the floor stops the slide
-      if (!supportedAt(row0, 1)) {
-        while (!supportedAt(row0, 0)) row0++;
-      }
+      // support must be directly under an anchor cell - counting adjacent
+      // columns let pieces "rest" on taller neighbours and float in mid-air
+      while (!supportedAt(row0)) row0++;
     }
 
     for (const [r, c] of solids) occupied.add(`${row0 + r},${col0 + c}`);
@@ -141,11 +136,9 @@ function settleUnstableChains(pieces: ImportedPlacement[], cfg: RoomConfig): voi
         for (const [ar, ac] of probe) {
           const r = p.row + ar;
           if (r >= cfg.rows) { stable.add(i); changed = true; return; }
-          for (const d of [0, -1, 1]) {
-            const owner = cellOwner.get(`${r},${p.col + ac + d}`);
-            if (owner !== undefined && owner !== i && stable.has(owner)) {
-              stable.add(i); changed = true; return;
-            }
+          const owner = cellOwner.get(`${r},${p.col + ac}`);
+          if (owner !== undefined && owner !== i && stable.has(owner)) {
+            stable.add(i); changed = true; return;
           }
         }
       });

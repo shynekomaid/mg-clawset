@@ -486,3 +486,15 @@ Chastity selection now checks ownership before selecting/forcing it.
 - Importing a savegame no longer leaves the furniture drawer open.
 - New "Empty room" / "Empty rooms" button (label follows the view) clears
   the open room or all unlocked rooms after a confirm; fully undoable.
+
+## Addendum (2026-06-11, #19): Strict support — the ±1 slack was the bug
+
+The IV/Isaac-Plush "two rows above the floor" report exposed the real
+flaw: the settle pass accepted support one column to the side (added for
+off-by-one records like the fridge-on-microwave stack). That let any
+piece standing NEXT TO a taller neighbour count it as support and float.
+Support is now strictly "directly under an anchor cell, or the floor" in
+both the per-item settle and the chain-stability pass. Genuine
+off-by-one stacks land on the floor beside their supporter instead of
+hovering — grounded beats clever. Verified: the only "unsupported" items
+after import are ceiling-hung pieces (fans), which is correct.

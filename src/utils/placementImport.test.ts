@@ -57,12 +57,14 @@ describe('applyRoomPlacements', () => {
     expect(out[1]).toMatchObject({ row: 5, col: 8 });
   });
 
-  it('keeps an item supported one column to the side (off-by-one record)', () => {
+  it('drops an item that only has a taller neighbour beside it', () => {
+    // nothing directly under the trinket's column: standing beside a
+    // platform is not support - it must fall to the floor
     const out = applyRoomPlacements(0, [
       pl('box', 9, 6, 1),       // floor platform at cols 9-10
       pl('trinket', 8, 5, 2),   // diagonally above its left edge
     ], byId);
-    expect(out[1]).toMatchObject({ row: 5, col: 8 });
+    expect(out[1]).toMatchObject({ row: 6, col: 8 });
   });
 
   it('leaves wallmounted items where the save puts them', () => {
