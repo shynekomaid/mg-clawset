@@ -109,8 +109,8 @@ export default function RoomDesignerWorkspace({
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [hoverItem, setHoverItem] = useState<string | null>(null);
   const [connectorLines, setConnectorLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
-  // lightweight hover overlay (item name tag) when the checklist panel is closed
-  const [hoverTip, setHoverTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  // lightweight hover overlay (item name + stats tag) when the checklist panel is closed
+  const [hoverTip, setHoverTip] = useState<{ x: number; y: number; text: string; item: FurnitureItem | null } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const linkRootRef = useRef<HTMLDivElement>(null);
 
@@ -173,12 +173,12 @@ export default function RoomDesignerWorkspace({
     }
     const rootRect = root.getBoundingClientRect();
     const r = piece.getBoundingClientRect();
-    let name = '';
+    let item: FurnitureItem | null = null;
     let count = 0;
     for (const room of rooms) {
       for (const pl of room) {
         if (pl.item.id === hoverItem) {
-          name = pl.item.name;
+          item = pl.item;
           count++;
         }
       }
@@ -187,8 +187,9 @@ export default function RoomDesignerWorkspace({
     setHoverTip({
       // keep the tag inside the container even for pieces at the edges
       x: Math.min(Math.max(r.left + r.width / 2 - rootRect.left, 70), rootRect.width - 70),
-      y: Math.max(r.top - rootRect.top, 30),
-      text: `${num ? `#${num} ` : ''}${name}${count > 1 ? ` \u00d7${count}` : ''}`,
+      y: Math.max(r.top - rootRect.top, 44),
+      text: `${num ? `#${num} ` : ''}${item?.name ?? ''}${count > 1 ? ` \u00d7${count}` : ''}`,
+      item,
     });
   }, [hoverItem, checklistOpen, rooms, labelNumbers]);
 
@@ -776,8 +777,20 @@ export default function RoomDesignerWorkspace({
             pointerEvents: 'none',
             zIndex: 40,
             boxShadow: '0 2px 8px rgba(0,0,0,0.35)',
-          }}>
-            {hoverTip.text}
+            // dark pill: stat icons must always render white
+            ['--icon-invert' as string]: 'invert(1)',
+          } as CSSProperties}>
+            <div style={{ textAlign: 'center' }}>{hoverTip.text}</div>
+            {hoverTip.item && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 2, fontSize: 11, fontWeight: 700 }}>
+                {ALL_STATS.filter((st) => hoverTip.item![st] !== 0).map((st) => (
+                  <span key={st} style={{ color: STAT_COLORS[st], display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                    <StatIcon stat={st} size={12} />
+                    {hoverTip.item![st] > 0 ? `+${hoverTip.item![st]}` : hoverTip.item![st]}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
         {connectorLines.length > 0 && (
