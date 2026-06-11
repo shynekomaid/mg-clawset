@@ -10,9 +10,11 @@ interface Props {
   labelNumbers?: Record<string, number> | null;
   hoverItemId?: string | null;
   onHoverItem?: (id: string | null) => void;
+  /** Click on a piece: open its room with the checklist focused on it. */
+  onSelectItem?: (roomIndex: number, itemId: string) => void;
 }
 
-function MiniRoom({ roomIndex, placed, unlocked, onSelect, labelNumbers, hoverItemId, onHoverItem }: {
+function MiniRoom({ roomIndex, placed, unlocked, onSelect, labelNumbers, hoverItemId, onHoverItem, onSelectItem }: {
   roomIndex: number;
   placed: PlacedFurniture[];
   unlocked: boolean;
@@ -20,6 +22,7 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect, labelNumbers, hoverIt
   labelNumbers?: Record<string, number> | null;
   hoverItemId?: string | null;
   onHoverItem?: (id: string | null) => void;
+  onSelectItem?: (roomIndex: number, itemId: string) => void;
 }) {
   const cfg = getRoomConfig(roomIndex);
 
@@ -99,6 +102,10 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect, labelNumbers, hoverIt
               data-piece-id={p.item.id}
               onMouseEnter={() => onHoverItem?.(p.item.id)}
               onMouseLeave={() => onHoverItem?.(null)}
+              onClick={onSelectItem ? (e) => {
+                e.stopPropagation();
+                onSelectItem(roomIndex, p.item.id);
+              } : undefined}
               style={{
                 position: 'absolute',
                 left: `${((p.col + minC) / cfg.cols) * 100}%`,
@@ -171,7 +178,7 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect, labelNumbers, hoverIt
  * Room 4 / Room 3 above Room 1 / Room 2 (matches the house image export).
  * Click a room to open it in the designer.
  */
-export default function HouseView({ rooms, isRoomUnlocked, onSelectRoom, labelNumbers, hoverItemId, onHoverItem }: Props) {
+export default function HouseView({ rooms, isRoomUnlocked, onSelectRoom, labelNumbers, hoverItemId, onHoverItem, onSelectItem }: Props) {
   const mini = (i: number) => (
     <MiniRoom
       roomIndex={i}
@@ -181,6 +188,7 @@ export default function HouseView({ rooms, isRoomUnlocked, onSelectRoom, labelNu
       labelNumbers={labelNumbers}
       hoverItemId={hoverItemId}
       onHoverItem={onHoverItem}
+      onSelectItem={onSelectItem}
     />
   );
 

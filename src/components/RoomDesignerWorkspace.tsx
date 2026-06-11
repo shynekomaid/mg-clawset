@@ -722,6 +722,11 @@ export default function RoomDesignerWorkspace({
               labelNumbers={labelNumbers}
               hoverItemId={hoverItem}
               onHoverItem={handleHoverItem}
+              onSelectItem={(ri, id) => {
+                onActiveRoomChange(ri);
+                setChecklistOpen(true);
+                setHoverItem(id);
+              }}
             />
           ) : (
             <RoomGrid
