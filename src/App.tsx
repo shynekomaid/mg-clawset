@@ -351,6 +351,10 @@ function App() {
     const { algorithm, plans } = config;
     if (plans.length === 0) return;
     const makeInstanceId = () => `placed-${nextInstanceId++}`;
+    // theorycrafting without a savegame: the whole in-game catalog is available
+    const effectiveOwnership = hasOwnership
+      ? ownership
+      : Object.fromEntries(allFurniture.map((it) => [it.id, 9]));
     // longer search budget is fine now that progress is visible
     const budgetMs = algorithm === 'maximize' ? 1500 : undefined;
     setFillProgress(0);
@@ -383,7 +387,7 @@ function App() {
         const plan = plans[pi];
         // loose upper bound: every remaining positive-scoring copy placed, geometry ignored
         for (const it of allFurniture) {
-          const remaining = (ownership[it.id] ?? 0) - (used[it.id] ?? 0);
+          const remaining = (effectiveOwnership[it.id] ?? 0) - (used[it.id] ?? 0);
           if (remaining <= 0) continue;
           const sc = statScore(it, plan.weights);
           if (sc > 0) upperScore += sc * remaining;
@@ -396,7 +400,7 @@ function App() {
           budgetMs,
           roomIndex: plan.roomIndex,
           allFurniture,
-          ownership,
+          ownership: effectiveOwnership,
           usedInOtherRooms: { ...used },
           makeInstanceId,
         }, (p) => setFillProgress((pi + p.fraction) / plans.length));
@@ -414,14 +418,15 @@ function App() {
         return;
       }
       updateRooms(newRooms);
+      // % vs the catalog is meaningless when theorycrafting without a save
       const pct = upperScore > 0 ? Math.round((achievedScore / upperScore) * 100) : 100;
-      setFillReport(
-        `Score ${achievedScore} \u2014 ${pct}% of the theoretical max (every scoring copy placed, space ignored) \u00b7 ${cellsUsed}/${capacity} cells used`,
-      );
+      setFillReport(hasOwnership
+        ? `Score ${achievedScore} \u2014 ${pct}% of the theoretical max (every scoring copy placed, space ignored) \u00b7 ${cellsUsed}/${capacity} cells used`
+        : `Score ${achievedScore} (full catalog, no savegame) \u00b7 ${cellsUsed}/${capacity} cells used`);
     } finally {
       setFillProgress(null);
     }
-  }, [rooms, ownership]);
+  }, [rooms, ownership, hasOwnership]);
 
   const handleSortChange = useCallback((field: SortField) => {
     setSort((prev) => ({

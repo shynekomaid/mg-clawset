@@ -230,10 +230,13 @@ export default function RoomDesignerWorkspace({
   const hasPositiveWeight = ALL_STATS.some((st) => statWeights[st] > 0);
 
   const unlockedRooms = ([ATTIC_INDEX, 0, 1, 2, 3] as number[]).filter(isRoomUnlocked);
-  // default to a different preset per room - a house full of breeding rooms helps nobody
+  // default to one of each preset, remaining rooms start as custom
   const PRESET_CYCLE: FillPresetKey[] = ['breeding', 'storage', 'mutation'];
-  const roomChoice = (ri: number) =>
-    roomPresets[ri] ?? PRESET_CYCLE[Math.max(0, unlockedRooms.indexOf(ri)) % PRESET_CYCLE.length];
+  const roomChoice = (ri: number): FillPresetKey | 'custom' | 'skip' => {
+    if (roomPresets[ri]) return roomPresets[ri];
+    const idx = Math.max(0, unlockedRooms.indexOf(ri));
+    return idx < PRESET_CYCLE.length ? PRESET_CYCLE[idx] : 'custom';
+  };
   const roomWeightsFor = (ri: number): Record<StatKey, -1 | 0 | 1> =>
     roomWeights[ri] ?? EMPTY_WEIGHTS;
   const cycleRoomStat = (ri: number, stat: StatKey) => {
