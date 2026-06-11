@@ -75,12 +75,14 @@ export default function WelcomeHero({ onLoadSavegame, onBrowse }: Props) {
           Browse without a save
         </button>
         <div style={{ fontSize: 11, color: 'var(--text-m)', lineHeight: 1.6 }}>
-          Based on mg-clawset by baenar —{' '}
-          <a href="https://x.com/baenar_" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-m)' }}>
-            @baenar_ on X
-          </a>{' '}·{' '}
+          Mewgenics Clawset — developed by{' '}
           <a href="https://github.com/baenar" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-m)' }}>
-            @baenar on GitHub
+            baenar
+          </a>{' '}
+          (<a href="https://x.com/baenar_" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-m)' }}>@baenar_ on X</a>)
+          {' '}and expanded by{' '}
+          <a href="https://github.com/xxlbug/mg-clawset" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-m)' }}>
+            xxlbug
           </a>
         </div>
       </div>

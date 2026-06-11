@@ -426,7 +426,7 @@ function App() {
     } finally {
       setFillProgress(null);
     }
-  }, [rooms, ownership, hasOwnership]);
+  }, [rooms, ownership, hasOwnership, updateRooms]);
 
   const handleSortChange = useCallback((field: SortField) => {
     setSort((prev) => ({
@@ -472,7 +472,7 @@ function App() {
       updateRooms(newRooms);
       setActiveRoom(HOUSE_VIEW);
     }
-  }, []);
+  }, [updateRooms]);
 
   const openImportModal = useCallback(() => {
     dismissHero();
@@ -519,7 +519,7 @@ function App() {
     while (newRooms.length < NUM_ROOMS) newRooms.push([]);
     updateRooms(newRooms);
     setActiveRoom(0);
-  }, []);
+  }, [updateRooms]);
 
   const handleDecrement = useCallback((id: string) => {
     setOwnership((prev) => {
