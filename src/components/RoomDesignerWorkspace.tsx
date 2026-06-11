@@ -79,12 +79,14 @@ interface Props {
   foodBox: FurnitureItem | null;
   /** 0..1 while an auto-fill search runs, null when idle. */
   fillProgress?: number | null;
+  /** Quality summary of the last auto-fill. */
+  fillReport?: string | null;
 }
 
 export default function RoomDesignerWorkspace({
   visible, placed, rooms, activeRoom, onActiveRoomChange,
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
-  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox, fillProgress = null,
+  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox, fillProgress = null, fillReport = null,
 }: Props) {
   const [expertView, setExpertView] = useState(false);
   const [presetKey, setPresetKey] = useState<FillPresetKey | 'custom'>('breeding');
@@ -600,6 +602,11 @@ export default function RoomDesignerWorkspace({
               </div>
             </>
           )}
+          {fillReport && fillProgress === null && (
+            <div style={{ fontSize: 11, color: 'var(--text-m)' }} title="The max assumes every positive-scoring copy fits; real rooms run out of space, so high percentages mean near-perfect.">
+              {fillReport}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
             <button
               style={{ ...smallBtn, ...(checklistOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
@@ -652,6 +659,10 @@ export default function RoomDesignerWorkspace({
               labelNumbers={labelNumbers}
               hoverItemId={hoverItem}
               onHoverItem={handleHoverItem}
+              onSelectItem={(id) => {
+                setChecklistOpen(true);
+                setHoverItem(id);
+              }}
             />
           )}
         </div>

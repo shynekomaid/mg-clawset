@@ -426,3 +426,21 @@ toggles in house view, locked rooms preserved. 31 unit tests pass.
   mouse-over). The checklist opens only via its button; connector lines
   remain checklist-only. The tag is clamped inside the view for edge
   pieces.
+
+## Addendum (2026-06-11, #15): Cell-accurate interaction, new mouse model, fill quality report
+
+- Placed-piece overlays are bounding boxes, so L-shaped furniture blocked
+  the free cells inside its rectangle. All pointer events now resolve to
+  the piece actually occupying the cell under the cursor (occupancy
+  lookup): hover, click, drag and right-click hit exactly the right item,
+  and empty notch cells fall through to the grid.
+- New mouse model: click opens the checklist (highlighting the item),
+  drag moves, right-click removes. Click-to-remove is gone - accidental
+  deletions worked against the user.
+- After every auto-fill the panel shows a quality line: achieved weighted
+  score vs. a loose upper bound (every remaining positive-scoring copy
+  placed, geometry ignored) plus cells used vs. capacity. The maximize
+  search is a heuristic (multi-start randomized greedy + ruin-and-recreate)
+  with no optimality proof; the report makes "how close?" visible. 100%
+  means provably optimal item selection; high 90s mean the room ran out of
+  space, not the search out of ideas.

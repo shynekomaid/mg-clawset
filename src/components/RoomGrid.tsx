@@ -41,6 +41,8 @@ interface Props {
   /** Item type currently hovered (grid or checklist); matching pieces glow. */
   hoverItemId?: string | null;
   onHoverItem?: (id: string | null) => void;
+  /** Click on a piece (cell-accurate): open its checklist entry. */
+  onSelectItem?: (id: string) => void;
 }
 
 function buildShapeTypeGrid(placed: PlacedFurniture[], cfg: RoomConfig): (number | null)[][] {
@@ -76,7 +78,7 @@ interface HoverInfo {
   valid: boolean;
 }
 
-export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView, roomIndex = 0, labelNumbers, hoverItemId, onHoverItem }: Props) {
+export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView, roomIndex = 0, labelNumbers, hoverItemId, onHoverItem, onSelectItem }: Props) {
   const cfg = getRoomConfig(roomIndex);
   const { cols, rows } = cfg;
 
@@ -86,6 +88,19 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
 
   const occupancy = buildOccupancy(placed, cfg);
   const anchorPoints = buildAnchorPointSet(placed, cfg);
+
+  // Overlay divs are bounding boxes; L-shapes leave free cells inside them.
+  // Resolve every pointer event to the piece actually occupying the cell.
+  const pieceAtEvent = (e: { clientX: number; clientY: number }): PlacedFurniture | null => {
+    if (!gridRef.current) return null;
+    const rect = gridRef.current.getBoundingClientRect();
+    const col = Math.floor((e.clientX - rect.left) / (rect.width / cols));
+    const row = Math.floor((e.clientY - rect.top) / (rect.height / rows));
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return null;
+    const id = occupancy[row]?.[col];
+    if (!id) return null;
+    return placed.find((pl) => pl.instanceId === id) ?? null;
+  };
   const shapeTypeGrid = expertView ? buildShapeTypeGrid(placed, cfg) : null;
 
   const getCellFromEvent = useCallback((e: DragEvent): { row: number; col: number } | null => {
@@ -304,9 +319,13 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
             key={p.instanceId}
             data-piece-id={p.item.id}
             draggable
-            onDragStart={(e) => handlePieceDragStart(e, p)}
+            onDragStart={(e) => {
+              const t = pieceAtEvent(e);
+              if (!t) { e.preventDefault(); return; }
+              handlePieceDragStart(e, t);
+            }}
             onDragEnd={handlePieceDragEnd}
-            onMouseEnter={() => onHoverItem?.(p.item.id)}
+            onMouseMove={(e) => onHoverItem?.(pieceAtEvent(e)?.item.id ?? null)}
             onMouseLeave={() => onHoverItem?.(null)}
             style={{
               position: 'absolute',
@@ -327,8 +346,16 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
               borderRadius: 4,
               background: isHovered ? 'rgba(193,73,83,0.12)' : 'transparent',
             }}
-            title={`${p.item.name} (drag to move, click to remove)`}
-            onClick={() => onRemove(p.instanceId)}
+            title={`${p.item.name} \u2014 drag to move \u00b7 click for checklist \u00b7 right-click to remove`}
+            onClick={(e) => {
+              const t = pieceAtEvent(e);
+              if (t) onSelectItem?.(t.item.id);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const t = pieceAtEvent(e);
+              if (t) onRemove(t.instanceId);
+            }}
           >
             <img
               src={fixedSrc}
@@ -374,7 +401,11 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
           <div
             key={`expert-drag-${p.instanceId}`}
             draggable
-            onDragStart={(e) => handlePieceDragStart(e, p)}
+            onDragStart={(e) => {
+              const t = pieceAtEvent(e);
+              if (!t) { e.preventDefault(); return; }
+              handlePieceDragStart(e, t);
+            }}
             onDragEnd={handlePieceDragEnd}
             style={{
               position: 'absolute',
@@ -387,8 +418,16 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
               opacity: isDragging ? 0.3 : 1,
               background: 'transparent',
             }}
-            title={`${p.item.name} (drag to move, click to remove)`}
-            onClick={() => onRemove(p.instanceId)}
+            title={`${p.item.name} \u2014 drag to move \u00b7 click for checklist \u00b7 right-click to remove`}
+            onClick={(e) => {
+              const t = pieceAtEvent(e);
+              if (t) onSelectItem?.(t.item.id);
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              const t = pieceAtEvent(e);
+              if (t) onRemove(t.instanceId);
+            }}
           />
         );
       })

@@ -10,7 +10,7 @@ import SaveImportModal from './components/SaveImportModal';
 import AppHeader from './components/AppHeader';
 import WelcomeHero from './components/WelcomeHero';
 import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/anchorHelpers';
-import { autoPopulateRoomAsync } from './utils/autoPopulate';
+import { autoPopulateRoomAsync, statScore } from './utils/autoPopulate';
 import type { AlgorithmKey, RoomFillPlan } from './utils/autoPopulate';
 import type { AppView } from './components/AppHeader';
 import useIsMobile from './hooks/useIsMobile';
@@ -186,6 +186,8 @@ function App() {
   const [houseInfo, setHouseInfo] = useState<HouseInfo | null>(loadHouseInfo);
   // 0..1 while an auto-fill search runs, null when idle
   const [fillProgress, setFillProgress] = useState<number | null>(null);
+  // quality summary of the last auto-fill ("how close to the theoretical max?")
+  const [fillReport, setFillReport] = useState<string | null>(null);
   const [view, setView] = useState<AppView>('house');
 
   const isRoomUnlocked = useCallback((i: number): boolean => {
@@ -303,6 +305,16 @@ function App() {
     // longer search budget is fine now that progress is visible
     const budgetMs = algorithm === 'maximize' ? 1500 : undefined;
     setFillProgress(0);
+    setFillReport(null);
+
+    const roomCapacity = (ri: number) => {
+      const cfg = getRoomConfig(ri);
+      let n = 0;
+      for (let r = 0; r < cfg.rows; r++) {
+        for (let c = 0; c < cfg.cols; c++) if (cfg.isValidCell(r, c)) n++;
+      }
+      return n;
+    };
 
     try {
       // Rooms without a plan (locked, skipped, or simply not part of this
@@ -314,8 +326,19 @@ function App() {
         for (const p of room) used[p.item.id] = (used[p.item.id] || 0) + 1;
       }
       let placedTotal = 0;
+      let achievedScore = 0;
+      let upperScore = 0;
+      let cellsUsed = 0;
+      let capacity = 0;
       for (let pi = 0; pi < plans.length; pi++) {
         const plan = plans[pi];
+        // loose upper bound: every remaining positive-scoring copy placed, geometry ignored
+        for (const it of allFurniture) {
+          const remaining = (ownership[it.id] ?? 0) - (used[it.id] ?? 0);
+          if (remaining <= 0) continue;
+          const sc = statScore(it, plan.weights);
+          if (sc > 0) upperScore += sc * remaining;
+        }
         const result = await autoPopulateRoomAsync({
           weights: plan.weights,
           minStats: plan.minStats,
@@ -330,13 +353,22 @@ function App() {
         }, (p) => setFillProgress((pi + p.fraction) / plans.length));
         newRooms[plan.roomIndex] = result;
         placedTotal += result.length;
-        for (const p of result) used[p.item.id] = (used[p.item.id] || 0) + 1;
+        for (const p of result) {
+          used[p.item.id] = (used[p.item.id] || 0) + 1;
+          achievedScore += statScore(p.item, plan.weights);
+          cellsUsed += p.item.spacesOccupied;
+        }
+        capacity += roomCapacity(plan.roomIndex);
       }
       if (placedTotal === 0) {
         window.alert('Nothing to place: no owned furniture with remaining copies scores positively for the selected stats.');
         return;
       }
       setRooms(newRooms);
+      const pct = upperScore > 0 ? Math.round((achievedScore / upperScore) * 100) : 100;
+      setFillReport(
+        `Score ${achievedScore} \u2014 ${pct}% of the theoretical max (every scoring copy placed, space ignored) \u00b7 ${cellsUsed}/${capacity} cells used`,
+      );
     } finally {
       setFillProgress(null);
     }
@@ -609,6 +641,7 @@ function App() {
             idols={ownedIdols}
             foodBox={foodBoxItem && (ownership[foodBoxItem.id] || 0) > 0 ? foodBoxItem : null}
             fillProgress={fillProgress}
+            fillReport={fillReport}
           />
         )}
         <div
