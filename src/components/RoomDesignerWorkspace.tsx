@@ -110,7 +110,7 @@ export default function RoomDesignerWorkspace({
   const [hoverItem, setHoverItem] = useState<string | null>(null);
   const [connectorLines, setConnectorLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
   // lightweight hover overlay (item name + stats tag) when the checklist panel is closed
-  const [hoverTip, setHoverTip] = useState<{ x: number; y: number; text: string; item: FurnitureItem | null } | null>(null);
+  const [hoverTip, setHoverTip] = useState<{ x: number; y: number; text: string; item: FurnitureItem | null; count: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const linkRootRef = useRef<HTMLDivElement>(null);
 
@@ -190,6 +190,7 @@ export default function RoomDesignerWorkspace({
       y: Math.max(r.top - rootRect.top, 44),
       text: `${num ? `#${num} ` : ''}${item?.name ?? ''}${count > 1 ? ` \u00d7${count}` : ''}`,
       item,
+      count,
     });
   }, [hoverItem, checklistOpen, rooms, labelNumbers]);
 
@@ -783,12 +784,17 @@ export default function RoomDesignerWorkspace({
             <div style={{ textAlign: 'center' }}>{hoverTip.text}</div>
             {hoverTip.item && (
               <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 2, fontSize: 11, fontWeight: 700 }}>
-                {ALL_STATS.filter((st) => hoverTip.item![st] !== 0).map((st) => (
-                  <span key={st} style={{ color: STAT_COLORS[st], display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                    <StatIcon stat={st} size={12} />
-                    {hoverTip.item![st] > 0 ? `+${hoverTip.item![st]}` : hoverTip.item![st]}
-                  </span>
-                ))}
+                {ALL_STATS.filter((st) => hoverTip.item![st] !== 0).map((st) => {
+                  const v = hoverTip.item![st];
+                  const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+                  return (
+                    <span key={st} style={{ color: STAT_COLORS[st], display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                      <StatIcon stat={st} size={12} />
+                      {/* per item; with multiple copies also the room total */}
+                      {hoverTip.count > 1 ? `${fmt(v)} (${fmt(v * hoverTip.count)})` : fmt(v)}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>
