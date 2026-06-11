@@ -401,3 +401,15 @@ without opening a dropdown, per-room presets produce distinct stat profiles
 (attic Breeding: stimulation 53; Room 1 Storage: comfort 42 + health;
 Room 2 Mutation: mutation 6 with stimulation minimized), drawer still
 toggles in house view, locked rooms preserved. 31 unit tests pass.
+
+## Addendum (2026-06-11, #13): Panel beside room chooser, inline preset descriptions
+
+- The auto-fill panel (with the Checklist / Furniture / Expert View buttons
+  at its bottom) now sits left of the house/room chooser in one top row,
+  both at the same height.
+- Every per-room preset select shows its preset's description inline, so
+  Breeding/Storage/Mutation are self-explanatory without opening anything;
+  the single-room view shows the active preset's description next to the
+  preset buttons.
+- First load defaults to a different preset per room (cycling Breeding →
+  Storage → Mutation in room order) instead of all-Breeding.
