@@ -145,3 +145,46 @@ export function summarizeRoster(cats: ParsedCat[]): RosterSummary {
 export function sevensCount(cat: ParsedCat): number {
   return (Object.values(cat.baseStats) as number[]).filter((v) => v >= 7).length;
 }
+
+/** Highest count of maxed (7) base stats across in-house cats (0 if none). */
+export function bestSevens(cats: ParsedCat[]): number {
+  const inHouse = cats.filter(isAvailable);
+  return inHouse.reduce((m, c) => Math.max(m, sevensCount(c)), 0);
+}
+
+/**
+ * Best-effort, data-driven progress: which Perfect-7 plan steps the save state
+ * already satisfies, so the guide can auto-track the "next step" instead of
+ * making the player tick boxes. These are heuristics over the loaded roster
+ * (step ids match PERFECT7_STAGES in breeding.ts).
+ */
+export function deriveCompletedSteps(
+  cats: ParsedCat[],
+  suggestions: PairSuggestion[],
+  hasViableRoom: boolean,
+): Set<string> {
+  const done = new Set<string>();
+  const inHouse = cats.filter(isAvailable);
+  const strong = (sex: Sex) => inHouse.filter((c) => c.sex === sex && sevensCount(c) >= 4);
+  const elite = (sex: Sex) => inHouse.filter((c) => c.sex === sex && sevensCount(c) >= 6);
+  const rooms = new Set(inHouse.map((c) => c.room).filter(Boolean));
+  const best = suggestions[0];
+  const max = bestSevens(cats);
+
+  // Stage 1 — foundation pairs in a good room, keepers of each sex.
+  if (suggestions.length > 0) done.add('s1-pairs');
+  if (hasViableRoom) done.add('s1-room');
+  if (strong('male').length >= 1 && strong('female').length >= 1) done.add('s1-keep');
+  // Stage 2 — lines separated across rooms; a near-complete keeper pair.
+  if (rooms.size >= 2) done.add('s2-rooms');
+  if (best && best.missing.length <= 1) done.add('s2-keeper');
+  // Stage 3 — strong enough to see gaps; a pair that already covers every 7.
+  if (max >= 5) done.add('s3-detect');
+  if (best && best.missing.length === 0) done.add('s3-outcross');
+  // Stage 4 — finishing: a near-perfect cat, an opposite-sex backup, a perfect 7.
+  if (max >= 6) done.add('s4-finish');
+  if (elite('male').length >= 1 && elite('female').length >= 1 && rooms.size >= 2) done.add('s4-backup');
+  if (max >= 7) done.add('s4-maintain');
+
+  return done;
+}

@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isRelated, suggestFoundationPairs, summarizeRoster, sevensCount, hatesEachOther, mutualLovers } from './breedingRoster';
+import { isRelated, suggestFoundationPairs, summarizeRoster, sevensCount, hatesEachOther, mutualLovers, bestSevens, deriveCompletedSteps } from './breedingRoster';
 import { CAT_STATS } from './breeding';
 import type { ParsedCat, Sex } from './catParser';
 import type { CatStat } from './breeding';
 
 let nextKey = 1;
-function cat(opts: { sex: Sex; stats: Partial<Record<CatStat, number>>; parents?: number[]; status?: ParsedCat['status']; name?: string; lovers?: number[]; haters?: number[]; dbKey?: number }): ParsedCat {
+function cat(opts: { sex: Sex; stats: Partial<Record<CatStat, number>>; parents?: number[]; status?: ParsedCat['status']; name?: string; lovers?: number[]; haters?: number[]; dbKey?: number; room?: string }): ParsedCat {
   const dbKey = opts.dbKey ?? nextKey++;
   const baseStats = {} as Record<CatStat, number>;
   for (const s of CAT_STATS) baseStats[s] = opts.stats[s] ?? 4;
@@ -20,7 +20,7 @@ function cat(opts: { sex: Sex; stats: Partial<Record<CatStat, number>>; parents?
     aggression: 0.2,
     libido: 0.5,
     status: opts.status ?? 'In House',
-    room: 'Floor1_Large',
+    room: opts.room ?? 'Floor1_Large',
     parents: opts.parents ?? [],
     loverKeys: opts.lovers ?? [],
     haterKeys: opts.haters ?? [],
@@ -127,5 +127,42 @@ describe('summarizeRoster', () => {
 describe('sevensCount', () => {
   it('counts stats already at 7', () => {
     expect(sevensCount(cat({ sex: 'male', stats: { STR: 7, CHA: 7, LCK: 7 } }))).toBe(3);
+  });
+});
+
+describe('bestSevens', () => {
+  it('returns the highest maxed-stat count among in-house cats', () => {
+    expect(bestSevens([
+      cat({ sex: 'male', stats: { STR: 7, CHA: 7 } }),
+      cat({ sex: 'female', stats: { STR: 7, DEX: 7, CON: 7, INT: 7 } }),
+      cat({ sex: 'male', stats: { STR: 7, DEX: 7, CON: 7, INT: 7, SPD: 7, CHA: 7, LCK: 7 }, status: 'Gone' }),
+    ])).toBe(4); // the perfect cat is Gone, so excluded
+  });
+  it('is 0 with no cats', () => {
+    expect(bestSevens([])).toBe(0);
+  });
+});
+
+describe('deriveCompletedSteps', () => {
+  it('marks nothing for an empty roster', () => {
+    expect(deriveCompletedSteps([], [], false).size).toBe(0);
+  });
+
+  it('marks foundation steps once pairs and a room exist', () => {
+    const m = cat({ sex: 'male', stats: { STR: 7, DEX: 7, CON: 7, INT: 7 }, parents: [10, 11] });
+    const f = cat({ sex: 'female', stats: { SPD: 7, CHA: 7, LCK: 7, CON: 7 }, parents: [12, 13], room: 'RoomB' });
+    const pairs = suggestFoundationPairs([m, f], 100);
+    const done = deriveCompletedSteps([m, f], pairs, true);
+    expect(done.has('s1-pairs')).toBe(true);  // a pair exists
+    expect(done.has('s1-room')).toBe(true);    // viable room passed in
+    expect(done.has('s1-keep')).toBe(true);    // a strong male + female in house
+    expect(done.has('s2-rooms')).toBe(true);   // cats span two rooms
+  });
+
+  it('marks the finish/maintain steps when a perfect cat is in house', () => {
+    const perfect = cat({ sex: 'male', stats: { STR: 7, DEX: 7, CON: 7, INT: 7, SPD: 7, CHA: 7, LCK: 7 } });
+    const done = deriveCompletedSteps([perfect], [], true);
+    expect(done.has('s4-finish')).toBe(true);   // max sevens ≥ 6
+    expect(done.has('s4-maintain')).toBe(true); // max sevens = 7
   });
 });

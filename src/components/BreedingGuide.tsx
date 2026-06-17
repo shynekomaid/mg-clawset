@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { PlacedFurniture } from '../types/furniture';
 import StatIcon from './StatIcon';
 import {
   PERFECT7_STAGES,
   TOTAL_STEPS,
-  ALL_STEP_IDS,
   nextStep,
   analyzeRoomsForBreeding,
   recommendBreedingRoom,
@@ -18,24 +17,17 @@ import {
 } from '../utils/breeding';
 import type { CatStat, RoomBreedingInfo, StatState } from '../utils/breeding';
 import type { ParsedCat } from '../utils/catParser';
-import { suggestFoundationPairs, summarizeRoster, sevensCount } from '../utils/breedingRoster';
+import {
+  suggestFoundationPairs,
+  summarizeRoster,
+  sevensCount,
+  bestSevens,
+  deriveCompletedSteps,
+} from '../utils/breedingRoster';
 import type { PairSuggestion } from '../utils/breedingRoster';
 
-const PROGRESS_KEY = 'mg-clawset-breeding-progress';
-
-function loadProgress(): Set<string> {
-  try {
-    const raw = localStorage.getItem(PROGRESS_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw) as string[];
-      if (Array.isArray(arr)) return new Set(arr.filter((id) => ALL_STEP_IDS.includes(id)));
-    }
-  } catch { /* ignore */ }
-  return new Set();
-}
-
-// Illustrative foundation pair for the "cats you need" preview. mg-clawset has
-// no cat data yet, so this is a worked example, not your save.
+// Illustrative foundation pair for the "cats you need" preview. Used only until
+// a save is loaded — then everything below runs off your real roster.
 const EXAMPLE_A: Record<CatStat, number> = { STR: 7, DEX: 7, CON: 5, INT: 7, SPD: 4, CHA: 7, LCK: 6 };
 const EXAMPLE_B: Record<CatStat, number> = { STR: 6, DEX: 7, CON: 7, INT: 5, SPD: 7, CHA: 4, LCK: 7 };
 
@@ -64,6 +56,12 @@ const pill = (bg: string): CSSProperties => ({
   fontWeight: 700, color: '#fff', background: bg,
 });
 
+/** "Floor1_Large" → "Floor1 Large" for display. */
+function prettyRoom(cat: ParsedCat): string {
+  if (cat.room) return cat.room.replace(/_/g, ' ');
+  return cat.status;
+}
+
 interface Props {
   rooms: PlacedFurniture[][];
   isRoomUnlocked: (i: number) => boolean;
@@ -76,20 +74,6 @@ interface Props {
 }
 
 export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom, onLoadSavegame }: Props) {
-  const [done, setDone] = useState<Set<string>>(loadProgress);
-
-  useEffect(() => {
-    localStorage.setItem(PROGRESS_KEY, JSON.stringify([...done]));
-  }, [done]);
-
-  const toggle = useCallback((id: string) => {
-    setDone((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  }, []);
-
   const roomInfos = useMemo(
     () => analyzeRoomsForBreeding(rooms, isRoomUnlocked),
     [rooms, isRoomUnlocked],
@@ -97,250 +81,288 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
   const recommended = useMemo(() => recommendBreedingRoom(roomInfos), [roomInfos]);
   const stim = recommended?.stimulation ?? 0;
 
-  const next = nextStep(done);
-  const completedCount = done.size;
-  const pct = Math.round((completedCount / TOTAL_STEPS) * 100);
-
   const hasCats = cats.length > 0;
   const roster = useMemo(() => (hasCats ? summarizeRoster(cats) : null), [cats, hasCats]);
-  const suggestions = useMemo(() => (hasCats ? suggestFoundationPairs(cats, stim, { limit: 6 }) : []), [cats, hasCats, stim]);
+  const suggestions = useMemo(
+    () => (hasCats ? suggestFoundationPairs(cats, stim, { limit: 8 }) : []),
+    [cats, hasCats, stim],
+  );
 
-  // The "cats you need" preview uses your best real pair when a save is loaded,
-  // otherwise a worked illustrative example.
-  const best = suggestions[0];
-  const previewA = best ? best.a.baseStats : EXAMPLE_A;
-  const previewB = best ? best.b.baseStats : EXAMPLE_B;
+  // Which pair the player is looking at. Cycles through the ranked suggestions
+  // so they can pick a different match if the top one isn't preferred.
+  const [pairIdx, setPairIdx] = useState(0);
+  // idx is clamped on every render, so a shrinking/changing suggestion list can
+  // never point out of bounds — no reset effect needed.
+  const idx = suggestions.length ? Math.min(pairIdx, suggestions.length - 1) : 0;
+  const selected: PairSuggestion | undefined = suggestions[idx];
+  const cycle = (delta: number) => {
+    if (!suggestions.length) return;
+    setPairIdx((p) => (p + delta + suggestions.length) % suggestions.length);
+  };
+
+  // Progress is derived from the save, not ticked by hand: how many stats the
+  // best in-house cat already maxes, plus which plan steps the roster satisfies.
+  const maxSevens = useMemo(() => bestSevens(cats), [cats]);
+  const bestCat = roster?.topBreeders[0] ?? null;
+  const done = useMemo(
+    () => deriveCompletedSteps(cats, suggestions, !!recommended),
+    [cats, suggestions, recommended],
+  );
+  const next = nextStep(done);
+  const pct7 = Math.round((maxSevens / MAX_STAT) * 100);
+
+  // "Cats you need" coverage grid: your selected pair, or the worked example.
+  const previewA = selected ? selected.a.baseStats : EXAMPLE_A;
+  const previewB = selected ? selected.b.baseStats : EXAMPLE_B;
   const previewCoverage = useMemo(() => pairCoverage(previewA, previewB, stim), [previewA, previewB, stim]);
   const abilities = abilityInheritanceChances(stim);
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
-      <div style={{ maxWidth: 980, margin: '0 auto' }}>
+      <div style={{ maxWidth: 820, margin: '0 auto' }}>
         {/* Intro */}
         <div style={{ marginBottom: 16 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-h)', margin: '0 0 4px' }}>
             🧬 Breeding Guide — Perfect 7
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-m)', margin: 0, lineHeight: 1.5 }}>
-            A "Perfect 7" cat has all seven base stats at the max value of {MAX_STAT}
-            {' '}(STR · DEX · CON · INT · SPD · CHA · LCK). You breed toward it by stacking
-            parents that already hold 7s and pushing clean, unrelated lines. This guide walks
-            the {PERFECT7_STAGES.length}-stage method and recommends which of your rooms to breed in.
+            Goal: one cat with all seven base stats at {MAX_STAT}. Load your save and the guide
+            tells you which two cats to breed next.
           </p>
         </div>
 
-        {/* 1 + 2 — next step + total progress */}
-        <div style={card}>
-          <h2 style={h2}>Your next step</h2>
-          <p style={sub}>{completedCount}/{TOTAL_STEPS} steps complete ({pct}%) toward a perfect 7-line.</p>
-          <div style={{ height: 8, background: 'var(--bg)', borderRadius: 6, overflow: 'hidden', marginBottom: 16, border: '1px solid var(--border)' }}>
-            <div style={{ width: `${pct}%`, height: '100%', background: 'var(--accent)', transition: 'width .3s ease' }} />
-          </div>
+        {/* ── BREED NEXT — the one thing to do now ── */}
+        <div style={{ ...card, borderColor: 'var(--accent)' }}>
+          <h2 style={h2}>Breed next</h2>
 
-          {next ? (
-            <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', background: 'var(--accent-bg)', border: '1px solid var(--accent)', borderRadius: 10, padding: 16 }}>
-              <span style={pill('var(--accent)')}>Stage {next.stage.num}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-h)' }}>{next.step.title}</div>
-                <div style={{ fontSize: 13, color: 'var(--text)', marginTop: 4, lineHeight: 1.5 }}>{next.step.detail}</div>
-                {(next.step.id === 's1-room' || next.step.id === 's1-pairs') && (
-                  <div style={{ marginTop: 10, fontSize: 13 }}>
-                    {recommended ? (
-                      <span>
-                        Recommended breeding room:{' '}
-                        <button onClick={() => onOpenRoom(recommended.index)} style={linkBtn}>
-                          {recommended.label}
-                        </button>{' '}
-                        — Stimulation <b>{recommended.stimulation}</b>
-                        {' '}(higher-stat inheritance {Math.round(recommended.betterChance * 100)}%), Comfort <b>{recommended.comfort}</b>.
-                      </span>
-                    ) : (
-                      <span style={{ color: STATE_COLOR.missing }}>
-                        No viable breeding room yet — build a room with Comfort ≥ -10 in the House view first.
-                      </span>
-                    )}
-                  </div>
+          {selected ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap', marginTop: 6 }}>
+                <span style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-h)' }}>
+                  {selected.a.name} <span style={{ color: 'var(--text-m)', fontWeight: 600 }}>({selected.a.sex})</span>
+                  {'  ×  '}
+                  {selected.b.name} <span style={{ color: 'var(--text-m)', fontWeight: 600 }}>({selected.b.sex})</span>
+                </span>
+                {selected.mutualLover && <span title="Mutual lovers — breeds reliably" style={{ color: STATE_COLOR.locked, fontSize: 18 }}>♥</span>}
+                {!selected.mutualLover && selected.lovesElsewhere && <span title="One loves another cat — less reliable" style={{ color: STATE_COLOR.reachable, fontSize: 16 }}>⚠</span>}
+              </div>
+
+              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 10, fontSize: 13 }}>
+                <span>Expected <b style={{ color: 'var(--accent)', fontSize: 15 }}>{selected.coverage.coverage.toFixed(1)}/7</b> stats maxed per kitten</span>
+                <span style={{ color: selected.riskPercent < 5 ? STATE_COLOR.locked : selected.riskPercent < 20 ? STATE_COLOR.reachable : STATE_COLOR.missing }}>
+                  defect risk <b>{selected.riskPercent.toFixed(0)}%</b>
+                </span>
+                {selected.missing.length > 0 && (
+                  <span style={{ color: STATE_COLOR.missing }}>still missing <b>{selected.missing.join(', ')}</b></span>
                 )}
-                <button onClick={() => toggle(next.step.id)} style={{ ...primaryBtn, marginTop: 12 }}>
-                  Mark done →
-                </button>
               </div>
-            </div>
-          ) : (
-            <div style={{ background: 'var(--accent-bg)', border: '1px solid var(--accent)', borderRadius: 10, padding: 16, fontSize: 14, color: 'var(--text-h)' }}>
-              🎉 All {TOTAL_STEPS} steps complete — your perfect-7 line should be locked in. Keep an unrelated backup alive.
-            </div>
-          )}
-        </div>
 
-        {/* 3 — room guidance */}
-        <div style={card}>
-          <h2 style={h2}>Room guidance</h2>
-          <p style={sub}>
-            Breeding rooms want high <b>Stimulation</b> and non-negative <b>Comfort</b>. Stimulation
-            raises the odds a kitten inherits the better parent's stat; Comfort below -10 makes
-            breeding auto-fail. Totals come from the furniture you placed in the House view.
-          </p>
-
-          {roomInfos.length === 0 ? (
-            <p style={{ fontSize: 13, color: STATE_COLOR.missing }}>No unlocked rooms. Load a savegame or design rooms in the House view.</p>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                <thead>
-                  <tr style={{ textAlign: 'left', color: 'var(--text-m)', fontSize: 11 }}>
-                    <th style={th}>Room</th>
-                    <th style={th}><StatIcon stat="stimulation" size={14} /> Stim</th>
-                    <th style={th}><StatIcon stat="comfort" size={14} /> Comfort</th>
-                    <th style={th}>Better-stat odds</th>
-                    <th style={th}>Status</th>
-                    <th style={th} />
-                  </tr>
-                </thead>
-                <tbody>
-                  {roomInfos.map((r) => <RoomRow key={r.index} r={r} best={r.index === recommended?.index} onOpen={() => onOpenRoom(r.index)} />)}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          <ul style={tips}>
-            <li>Dedicate your strongest-Stimulation room to the active breeding pair.</li>
-            <li><b>Separate your lines:</b> keep different lines (and grown siblings) in different rooms so you never inbreed by accident — that's Stage 2.</li>
-            <li>Keep Comfort ≥ 0 — negative Comfort lowers success, and below -10 nothing breeds at all.</li>
-            <li style={{ color: 'var(--text-m)' }}>
-              At Stimulation {stim}: better-stat inheritance {Math.round(betterStatChance(stim) * 100)}%,
-              first-ability {Math.round(abilities.firstActive * 100)}%, passive {Math.round(abilities.passive * 100)}%.
-            </li>
-          </ul>
-        </div>
-
-        {/* 4 — cats you need (real roster when a save is loaded) */}
-        <div style={card}>
-          <h2 style={h2}>Cats you need {hasCats ? '— from your save' : '(preview)'}</h2>
-          <p style={sub}>
-            A <b>foundation pair</b> should, between both parents, cover every stat at 7. A stat is
-            <span style={{ color: STATE_COLOR.locked, fontWeight: 700 }}> locked</span> when both parents have ≥7,
-            <span style={{ color: STATE_COLOR.reachable, fontWeight: 700 }}> reachable</span> when one does, and
-            <span style={{ color: STATE_COLOR.missing, fontWeight: 700 }}> missing</span> when neither does.
-            Odds use your recommended room's Stimulation = {stim}.
-          </p>
-
-          {!hasCats && (
-            <div style={{ background: 'var(--social-bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: 13 }}>
-              Showing a worked example.{' '}
-              {onLoadSavegame
-                ? <button onClick={onLoadSavegame} style={linkBtn}>Load your savegame</button>
-                : 'Load your savegame'}{' '}
-              to analyze your real cats, rank your best foundation pairs, and flag related cats.
-            </div>
-          )}
-
-          {best && (
-            <div style={{ fontSize: 13, marginBottom: 8 }}>
-              Your strongest clean pair: <b>{best.a.name}</b> ({best.a.sex}) × <b>{best.b.name}</b> ({best.b.sex})
-              {' · '}<span style={{ color: best.riskPercent < 5 ? STATE_COLOR.locked : STATE_COLOR.reachable }}>
-                defect risk {best.riskPercent.toFixed(0)}%
-              </span>
-            </div>
-          )}
-
-          <CoverageGrid a={previewA} b={previewB} cov={previewCoverage} />
-
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, fontSize: 12 }}>
-            <div>Expected 7s per kitten: <b style={{ fontSize: 15, color: 'var(--accent)' }}>{previewCoverage.coverage.toFixed(1)}/7</b></div>
-            {previewCoverage.missing.length > 0 && (
-              <div style={{ color: STATE_COLOR.missing }}>
-                Still missing: <b>{previewCoverage.missing.join(', ')}</b> → outcross for these (Stage 3).
+              {/* where the two cats are right now */}
+              <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 12, fontSize: 13, color: 'var(--text)' }}>
+                <span>📍 <b>{selected.a.name}</b> is in <b>{prettyRoom(selected.a)}</b></span>
+                <span>📍 <b>{selected.b.name}</b> is in <b>{prettyRoom(selected.b)}</b></span>
               </div>
-            )}
-          </div>
 
-          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 12 }}>
-            {(['locked', 'reachable', 'missing'] as StatState[]).map((s) => (
-              <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-m)' }}>
-                <span style={{ width: 12, height: 12, borderRadius: 3, background: STATE_COLOR[s], display: 'inline-block' }} />
-                {STATE_LABEL[s]}
-              </span>
-            ))}
-          </div>
-        </div>
+              {/* where to put them */}
+              <div style={{ marginTop: 12, fontSize: 13 }}>
+                {recommended ? (
+                  <span>
+                    Move them together into{' '}
+                    <button onClick={() => onOpenRoom(recommended.index)} style={linkBtn}>{recommended.label}</button>{' '}
+                    — Stimulation <b>{recommended.stimulation}</b> ({Math.round(recommended.betterChance * 100)}% better-stat odds), Comfort <b>{recommended.comfort}</b>.
+                  </span>
+                ) : (
+                  <span style={{ color: STATE_COLOR.missing }}>
+                    No viable breeding room yet — build one with Comfort ≥ -10 in the House view first.
+                  </span>
+                )}
+              </div>
 
-        {/* roster-driven suggestions */}
-        {hasCats && roster && (
-          <div style={card}>
-            <h2 style={h2}>Your roster &amp; suggested foundation pairs</h2>
-            <p style={sub}>
-              {roster.total} cats in save · {roster.inHouse} in the house · {roster.males}♂ / {roster.females}♀.
-              Pairs below are the highest-coverage in-house matches with offspring birth-defect risk ≤ 10% (from the game CoI formula).
-              Family and cats that hate each other are excluded; mutual lovers (<span style={{ color: STATE_COLOR.locked }}>♥</span>) are preferred and a cat already in love elsewhere (<span style={{ color: STATE_COLOR.reachable }}>⚠</span>) is demoted.
+              {/* pair switcher */}
+              {suggestions.length > 1 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                  <button onClick={() => cycle(-1)} style={ghostBtn} aria-label="Previous pair">◀</button>
+                  <span style={{ fontSize: 12, color: 'var(--text-m)' }}>
+                    Pair <b style={{ color: 'var(--text-h)' }}>{idx + 1}</b> of {suggestions.length} — ranked by coverage
+                  </span>
+                  <button onClick={() => cycle(1)} style={ghostBtn} aria-label="Next pair">▶</button>
+                  <span style={{ fontSize: 12, color: 'var(--text-m)', marginLeft: 'auto' }}>not what you want? cycle for another match</span>
+                </div>
+              )}
+            </>
+          ) : hasCats ? (
+            <p style={{ fontSize: 13, color: STATE_COLOR.missing, margin: '6px 0 0' }}>
+              No viable unrelated in-house pair right now — bring in an unrelated stray, or check that your breeders are placed in the house.
             </p>
-
-            {suggestions.length === 0 ? (
-              <p style={{ fontSize: 13, color: STATE_COLOR.missing }}>
-                No viable unrelated in-house pairs found — bring in an unrelated stray (Stage 3) or check that cats are placed in the house.
+          ) : (
+            <div style={{ fontSize: 13, marginTop: 6 }}>
+              <p style={{ margin: '0 0 10px', lineHeight: 1.5 }}>
+                {next ? <>Method step: <b>{next.step.title}</b>. </> : null}
+                Load your save to get the exact pair.
               </p>
+              {onLoadSavegame
+                ? <button onClick={onLoadSavegame} style={primaryBtn}>Load savegame →</button>
+                : <span style={{ color: 'var(--text-m)' }}>Import a save from the furniture list.</span>}
+            </div>
+          )}
+        </div>
+
+        {/* ── PROGRESS — best cat + this pair's kittens ── */}
+        <div style={card}>
+          <h2 style={h2}>Progress to Perfect 7</h2>
+          <p style={sub}>
+            {hasCats
+              ? <>Best cat maxes <b>{maxSevens}/{MAX_STAT}</b> stats. {done.size}/{TOTAL_STEPS} method steps satisfied (auto-tracked from your save).</>
+              : <>Load a save to track progress automatically — no checkboxes to tick.</>}
+          </p>
+          <div style={{ height: 10, background: 'var(--bg)', borderRadius: 6, overflow: 'hidden', marginBottom: 14, border: '1px solid var(--border)' }}>
+            <div style={{ width: `${pct7}%`, height: '100%', background: 'var(--accent)', transition: 'width .3s ease' }} />
+          </div>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
+            <div>
+              <div style={{ color: 'var(--text-m)', fontSize: 11 }}>Closest cat you have</div>
+              <div style={{ fontWeight: 700, color: 'var(--text-h)' }}>
+                {bestCat ? <>{bestCat.name} — {maxSevens}/{MAX_STAT} maxed</> : '—'}
+              </div>
+            </div>
+            <div>
+              <div style={{ color: 'var(--text-m)', fontSize: 11 }}>This pair's kittens (expected)</div>
+              <div style={{ fontWeight: 700, color: 'var(--accent)' }}>
+                {selected ? <>{selected.coverage.coverage.toFixed(1)}/{MAX_STAT}</> : `${previewCoverage.coverage.toFixed(1)}/${MAX_STAT} (example)`}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── DETAILS (collapsed) — full method, rooms, roster ── */}
+        <details style={card}>
+          <summary style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-h)', cursor: 'pointer' }}>
+            Show full method, room guidance &amp; roster
+          </summary>
+
+          <div style={{ marginTop: 18 }}>
+            {/* room guidance */}
+            <h3 style={h3}>Room guidance</h3>
+            <p style={sub}>
+              Breeding rooms want high <b>Stimulation</b> (better-stat odds) and Comfort ≥ -10 (below that
+              breeding auto-fails). Totals come from the furniture you placed in the House view.
+            </p>
+            {roomInfos.length === 0 ? (
+              <p style={{ fontSize: 13, color: STATE_COLOR.missing }}>No unlocked rooms. Load a savegame or design rooms in the House view.</p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ textAlign: 'left', color: 'var(--text-m)', fontSize: 11 }}>
-                      <th style={th}>Pair</th>
-                      <th style={th}>Expected 7s</th>
-                      <th style={th}>Risk%</th>
-                      <th style={th}>Locked now</th>
-                      <th style={th}>Missing</th>
+                      <th style={th}>Room</th>
+                      <th style={th}><StatIcon stat="stimulation" size={14} /> Stim</th>
+                      <th style={th}><StatIcon stat="comfort" size={14} /> Comfort</th>
+                      <th style={th}>Better-stat odds</th>
+                      <th style={th}>Status</th>
+                      <th style={th} />
                     </tr>
                   </thead>
                   <tbody>
-                    {suggestions.map((s) => <SuggestionRow key={`${s.a.dbKey}-${s.b.dbKey}`} s={s} />)}
+                    {roomInfos.map((r) => <RoomRow key={r.index} r={r} best={r.index === recommended?.index} onOpen={() => onOpenRoom(r.index)} />)}
                   </tbody>
                 </table>
               </div>
             )}
+            <p style={{ fontSize: 12, color: 'var(--text-m)', margin: '10px 0 0' }}>
+              At Stimulation {stim}: better-stat inheritance {Math.round(betterStatChance(stim) * 100)}%,
+              first-ability {Math.round(abilities.firstActive * 100)}%, passive {Math.round(abilities.passive * 100)}%.
+            </p>
 
-            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)', margin: '18px 0 6px' }}>Top breeders (most 7s already)</h3>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {roster.topBreeders.map((c) => (
-                <span key={c.dbKey} title={CAT_STATS.map((st) => `${st} ${c.baseStats[st]}`).join(' · ')}
-                  style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--social-bg)', border: '1px solid var(--border)' }}>
-                  <b>{c.name}</b> <span style={{ color: 'var(--text-m)' }}>{c.sex} · {sevensCount(c)}×7 · {c.room || c.status}</span>
+            {/* cats you need — coverage grid for the selected pair */}
+            <h3 style={{ ...h3, marginTop: 24 }}>Stat coverage {selected ? `— ${selected.a.name} × ${selected.b.name}` : '(example)'}</h3>
+            <p style={sub}>
+              Between both parents a stat is
+              <span style={{ color: STATE_COLOR.locked, fontWeight: 700 }}> locked</span> (both ≥7),
+              <span style={{ color: STATE_COLOR.reachable, fontWeight: 700 }}> reachable</span> (one ≥7), or
+              <span style={{ color: STATE_COLOR.missing, fontWeight: 700 }}> missing</span> (neither). Odds at Stimulation {stim}.
+            </p>
+            <CoverageGrid a={previewA} b={previewB} cov={previewCoverage} />
+            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 12 }}>
+              {(['locked', 'reachable', 'missing'] as StatState[]).map((s) => (
+                <span key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-m)' }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, background: STATE_COLOR[s], display: 'inline-block' }} />
+                  {STATE_LABEL[s]}
                 </span>
               ))}
             </div>
-          </div>
-        )}
 
-        {/* full staged plan */}
-        <div style={card}>
-          <h2 style={h2}>The {PERFECT7_STAGES.length}-stage plan ({TOTAL_STEPS} steps)</h2>
-          <p style={sub}>Tick steps as you go — progress is saved in your browser.</p>
-          {PERFECT7_STAGES.map((stage) => (
-            <div key={stage.num} style={{ marginBottom: 18 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                <span style={pill('var(--accent)')}>Stage {stage.num}</span>
-                <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-h)' }}>{stage.title}</span>
-                <span style={{ fontSize: 12, color: 'var(--text-m)' }}>— {stage.goal}</span>
-              </div>
-              <p style={{ fontSize: 13, color: 'var(--text)', margin: '0 0 10px', lineHeight: 1.5 }}>{stage.summary}</p>
-              {stage.steps.map((step) => {
-                const checked = done.has(step.id);
-                return (
-                  <label key={step.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 8, cursor: 'pointer', background: checked ? 'var(--social-bg)' : 'transparent', marginBottom: 4 }}>
-                    <input type="checkbox" checked={checked} onChange={() => toggle(step.id)} style={{ marginTop: 3, accentColor: 'var(--accent)' }} />
-                    <span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-h)', textDecoration: checked ? 'line-through' : 'none', opacity: checked ? 0.6 : 1 }}>{step.title}</span>
-                      <span style={{ display: 'block', fontSize: 12, color: 'var(--text-m)', marginTop: 2, lineHeight: 1.45 }}>{step.detail}</span>
+            {/* ranked pairs + roster */}
+            {hasCats && roster && (
+              <>
+                <h3 style={{ ...h3, marginTop: 24 }}>All suggested pairs</h3>
+                <p style={sub}>
+                  {roster.total} cats · {roster.inHouse} in house · {roster.males}♂ / {roster.females}♀.
+                  Highest-coverage in-house matches, defect risk ≤ 10%. Family and mutual haters excluded;
+                  mutual lovers (<span style={{ color: STATE_COLOR.locked }}>♥</span>) preferred, loves-elsewhere (<span style={{ color: STATE_COLOR.reachable }}>⚠</span>) demoted.
+                  Click a row to make it the "breed next" pair.
+                </p>
+                {suggestions.length === 0 ? (
+                  <p style={{ fontSize: 13, color: STATE_COLOR.missing }}>No viable unrelated in-house pairs found.</p>
+                ) : (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ textAlign: 'left', color: 'var(--text-m)', fontSize: 11 }}>
+                          <th style={th}>Pair</th>
+                          <th style={th}>Expected 7s</th>
+                          <th style={th}>Risk%</th>
+                          <th style={th}>Locked now</th>
+                          <th style={th}>Missing</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {suggestions.map((s, i) => (
+                          <SuggestionRow key={`${s.a.dbKey}-${s.b.dbKey}`} s={s} active={i === idx} onPick={() => setPairIdx(i)} />
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                <h3 style={{ ...h3, marginTop: 24 }}>Top breeders (most 7s already)</h3>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {roster.topBreeders.map((c) => (
+                    <span key={c.dbKey} title={CAT_STATS.map((st) => `${st} ${c.baseStats[st]}`).join(' · ')}
+                      style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--social-bg)', border: '1px solid var(--border)' }}>
+                      <b>{c.name}</b> <span style={{ color: 'var(--text-m)' }}>{c.sex} · {sevensCount(c)}×7 · {prettyRoom(c)}</span>
                     </span>
-                  </label>
-                );
-              })}
-              <ul style={{ ...tips, marginTop: 6 }}>
-                {stage.notes.map((n) => <li key={n} style={{ color: 'var(--text-m)' }}>{n}</li>)}
-              </ul>
-            </div>
-          ))}
-        </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* staged plan — auto-tracked, read-only */}
+            <h3 style={{ ...h3, marginTop: 24 }}>The {PERFECT7_STAGES.length}-stage method ({TOTAL_STEPS} steps)</h3>
+            <p style={sub}>Auto-tracked from your save — the highlighted step is what "Breed next" is driving toward.</p>
+            {PERFECT7_STAGES.map((stage) => (
+              <div key={stage.num} style={{ marginBottom: 18 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                  <span style={pill('var(--accent)')}>Stage {stage.num}</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-h)' }}>{stage.title}</span>
+                  <span style={{ fontSize: 12, color: 'var(--text-m)' }}>— {stage.goal}</span>
+                </div>
+                {stage.steps.map((step) => {
+                  const checked = done.has(step.id);
+                  const isNext = next?.step.id === step.id;
+                  return (
+                    <div key={step.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 8, background: isNext ? 'var(--accent-bg)' : checked ? 'var(--social-bg)' : 'transparent', border: isNext ? '1px solid var(--accent)' : '1px solid transparent', marginBottom: 4 }}>
+                      <span style={{ marginTop: 1, fontSize: 14 }}>{checked ? '✅' : isNext ? '➡️' : '⬜'}</span>
+                      <span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-h)', textDecoration: checked ? 'line-through' : 'none', opacity: checked ? 0.6 : 1 }}>{step.title}</span>
+                        <span style={{ display: 'block', fontSize: 12, color: 'var(--text-m)', marginTop: 2, lineHeight: 1.45 }}>{step.detail}</span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </details>
 
         <p style={{ fontSize: 11, color: 'var(--text-m)', textAlign: 'center', marginBottom: 24 }}>
           Method + cat-save parsing adapted from frankieg33/MewgenicsBreedingManager (Perfect 7 Planner).
@@ -372,9 +394,9 @@ function RoomRow({ r, best, onOpen }: { r: RoomBreedingInfo; best: boolean; onOp
   );
 }
 
-function SuggestionRow({ s }: { s: PairSuggestion }) {
+function SuggestionRow({ s, active, onPick }: { s: PairSuggestion; active: boolean; onPick: () => void }) {
   return (
-    <tr style={{ borderTop: '1px solid var(--border)' }}>
+    <tr onClick={onPick} style={{ borderTop: '1px solid var(--border)', cursor: 'pointer', background: active ? 'var(--accent-bg)' : 'transparent' }}>
       <td style={td}>
         <b style={{ color: 'var(--text-h)' }}>{s.a.name}</b> <span style={{ color: 'var(--text-m)' }}>({s.a.sex})</span>
         {' × '}
@@ -433,6 +455,7 @@ function CoverageGrid({ a, b, cov }: { a: Record<CatStat, number>; b: Record<Cat
 
 const th: CSSProperties = { padding: '6px 10px', fontWeight: 600 };
 const td: CSSProperties = { padding: '8px 10px' };
-const tips: CSSProperties = { margin: '12px 0 0', paddingLeft: 18, fontSize: 12.5, color: 'var(--text)', lineHeight: 1.6 };
+const h3: CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-h)', margin: '0 0 4px' };
 const linkBtn: CSSProperties = { background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 13, fontFamily: 'var(--font)' };
 const primaryBtn: CSSProperties = { padding: '7px 16px', borderRadius: 8, background: 'var(--accent)', color: 'var(--bg)', fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer', fontFamily: 'var(--font)' };
+const ghostBtn: CSSProperties = { padding: '4px 12px', borderRadius: 8, background: 'var(--bg)', color: 'var(--text-h)', fontWeight: 700, fontSize: 13, border: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'var(--font)' };
