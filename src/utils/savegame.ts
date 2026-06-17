@@ -1,5 +1,7 @@
 import initSqlJs from 'sql.js';
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url';
+import { parseCatBlob, parseHouseState, parseAdventureKeys, parsePedigree } from './catParser';
+import type { ParsedCat } from './catParser';
 
 export interface HouseInfo {
   atticUnlocked: boolean;
@@ -23,6 +25,8 @@ export interface SavegameParseResult {
   unmatchedNames: string[];
   houseInfo: HouseInfo | null;
   placements: SavedPlacement[];
+  /** Cats read from the save (empty if the save has no cats table). */
+  cats: ParsedCat[];
 }
 
 /**
@@ -150,6 +154,7 @@ export async function parseSavegame(
   const itemCounts: { name: string; quality: number }[] = [];
   const placements: SavedPlacement[] = [];
   let houseInfo: HouseInfo | null = null;
+  let cats: ParsedCat[] = [];
   try {
     const stmt = db.prepare('SELECT key, data FROM furniture');
     while (stmt.step()) {
@@ -170,14 +175,44 @@ export async function parseSavegame(
     }
     stmt.free();
 
-    try {
-      const hs = db.prepare("SELECT data FROM files WHERE key = 'house_unlocks'");
-      if (hs.step()) {
-        houseInfo = parseHouseUnlocks(hs.getAsObject().data as Uint8Array);
+    const readFile = (key: string): Uint8Array | null => {
+      try {
+        const st = db.prepare('SELECT data FROM files WHERE key = ?');
+        st.bind([key]);
+        let out: Uint8Array | null = null;
+        if (st.step()) out = st.getAsObject().data as Uint8Array;
+        st.free();
+        return out;
+      } catch {
+        return null;
       }
-      hs.free();
+    };
+
+    const houseUnlocks = readFile('house_unlocks');
+    if (houseUnlocks) houseInfo = parseHouseUnlocks(houseUnlocks);
+
+    // Cats: room/adventure/pedigree context first, then each lz4 cat blob.
+    try {
+      const houseState = readFile('house_state');
+      const adventureState = readFile('adventure_state');
+      const pedigree = readFile('pedigree');
+      const rooms = houseState ? parseHouseState(houseState) : new Map<number, string>();
+      const adventureKeys = adventureState ? parseAdventureKeys(adventureState) : new Set<number>();
+      const pedMap = pedigree ? parsePedigree(pedigree) : new Map<number, number[]>();
+
+      const cs = db.prepare('SELECT key, data FROM cats');
+      while (cs.step()) {
+        const row = cs.getAsObject();
+        const cat = parseCatBlob(row.data as Uint8Array, row.key as number, rooms, adventureKeys);
+        if (cat) {
+          cat.parents = pedMap.get(cat.dbKey) ?? [];
+          cats.push(cat);
+        }
+      }
+      cs.free();
     } catch {
-      // older saves / synthetic files may lack the files table
+      // saves without a cats table (or an unexpected layout) just yield no cats
+      cats = [];
     }
   } finally {
     db.close();
@@ -206,5 +241,5 @@ export async function parseSavegame(
     }
   }
 
-  return { ownership, matched, unmatchedNames, houseInfo, placements };
+  return { ownership, matched, unmatchedNames, houseInfo, placements, cats };
 }

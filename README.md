@@ -42,8 +42,9 @@ Each stat is represented by an icon in the column headers and room summary:
 - **Next step** — always shows the single next action to take, plus the recommended room to breed in.
 - **Total progress** — the full 4-stage / multi-step plan with a saved checklist (`X/N steps complete`).
 - **Room guidance** — reads the Stimulation and Comfort you've designed into each room and recommends the best breeding room (high Stimulation, Comfort ≥ 0). Jump straight to a room in the designer.
-- **Cats you need** — a worked foundation-pair example showing which stats are *locked*, *reachable*, or *missing* at 7, with expected 7s-per-kitten at your room's Stimulation.
-- Breeding math (inheritance odds, comfort gate) is ported from [frankieg33/MewgenicsBreedingManager](https://github.com/frankieg33/MewgenicsBreedingManager)'s Perfect 7 Planner.
+- **Cats you need** — which stats are *locked*, *reachable*, or *missing* at 7 for a pair, with expected 7s-per-kitten at your room's Stimulation.
+- **Reads your real cats** — when you load a savegame, the guide parses every cat (name, sex, the seven base stats, room, ancestry) and ranks your strongest **unrelated** in-house foundation pairs, excluding siblings and parent/child automatically. Without a save it shows a worked example.
+- Breeding math (inheritance odds, comfort gate) and the cat-blob parser are ported from [frankieg33/MewgenicsBreedingManager](https://github.com/frankieg33/MewgenicsBreedingManager)'s Perfect 7 Planner / save parser.
 
 ### Import from Save File
 

@@ -17,6 +17,7 @@ import type { AppView } from './components/AppHeader';
 import useIsMobile from './hooks/useIsMobile';
 import { parseSavegame } from './utils/savegame';
 import type { HouseInfo, SavedPlacement } from './utils/savegame';
+import type { ParsedCat } from './utils/catParser';
 import { saveSavefileHandle, loadSavefileHandle, readRememberedSavefile } from './utils/savefileHandle';
 import { applyRoomPlacements } from './utils/placementImport';
 
@@ -75,6 +76,7 @@ const IDOL_RE = /special_\w*(idol)/i;
 const idolItems = allFurniture.filter((it) => IDOL_RE.test(it.image_url));
 const foodBoxItem = allFurniture.find((it) => it.image_url.includes('special_foodbox')) ?? null;
 const HOUSE_UNLOCKS_KEY = 'mg-clawset-house-unlocks';
+const CATS_STORAGE_KEY = 'mg-clawset-cats';
 
 function loadHouseInfo(): HouseInfo | null {
   try {
@@ -82,6 +84,17 @@ function loadHouseInfo(): HouseInfo | null {
     if (raw) return JSON.parse(raw);
   } catch { /* ignore */ }
   return null;
+}
+
+function loadCats(): ParsedCat[] {
+  try {
+    const raw = localStorage.getItem(CATS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch { /* ignore */ }
+  return [];
 }
 
 const defaultFilters: Filters = {
@@ -185,6 +198,7 @@ function App() {
   const [savefileName, setSavefileName] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const [houseInfo, setHouseInfo] = useState<HouseInfo | null>(loadHouseInfo);
+  const [cats, setCats] = useState<ParsedCat[]>(loadCats);
   // 0..1 while an auto-fill search runs, null when idle
   const [fillProgress, setFillProgress] = useState<number | null>(null);
   // quality summary of the last auto-fill ("how close to the theoretical max?")
@@ -212,6 +226,13 @@ function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(ownership));
   }, [ownership]);
+
+  useEffect(() => {
+    try {
+      if (cats.length > 0) localStorage.setItem(CATS_STORAGE_KEY, JSON.stringify(cats));
+      else localStorage.removeItem(CATS_STORAGE_KEY);
+    } catch { /* roster too large for storage: keep it in memory only */ }
+  }, [cats]);
 
   useEffect(() => {
     localStorage.setItem(ROOMS_STORAGE_KEY, JSON.stringify(rooms));
@@ -446,7 +467,8 @@ function App() {
     setOwnership((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
   }, []);
 
-  const handleImportOwnership = useCallback((newOwnership: Record<string, number> | null, newHouseInfo: HouseInfo | null = null, placements: SavedPlacement[] | null = null) => {
+  const handleImportOwnership = useCallback((newOwnership: Record<string, number> | null, newHouseInfo: HouseInfo | null = null, placements: SavedPlacement[] | null = null, newCats?: ParsedCat[]) => {
+    if (newCats && newCats.length > 0) setCats(newCats);
     if (newOwnership) {
       setOwnership(newOwnership);
       // After loading a savegame, show what the player actually owns
@@ -492,9 +514,9 @@ function App() {
     try {
       const remembered = await readRememberedSavefile();
       if (remembered) {
-        const { ownership: newOwnership, houseInfo: hi, placements } = await parseSavegame(remembered.data, furnitureIdMap);
+        const { ownership: newOwnership, houseInfo: hi, placements, cats: newCats } = await parseSavegame(remembered.data, furnitureIdMap);
         if (Object.keys(newOwnership).length > 0) {
-          handleImportOwnership(newOwnership, hi, placements);
+          handleImportOwnership(newOwnership, hi, placements, newCats);
           return;
         }
       }
@@ -656,7 +678,9 @@ function App() {
         <BreedingGuide
           rooms={rooms}
           isRoomUnlocked={isRoomUnlocked}
+          cats={cats}
           onOpenRoom={(i) => { setView('house'); setActiveRoom(i); }}
+          onLoadSavegame={handleLoadSavegame}
         />
       ) : !isMobile && view === 'furniture' ? (
         <div style={{ flex: 1, minHeight: 0, padding: 16, maxWidth: 1200, width: '100%', margin: '0 auto', boxSizing: 'border-box' }}>

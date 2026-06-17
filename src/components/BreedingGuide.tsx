@@ -17,6 +17,9 @@ import {
   MAX_STAT,
 } from '../utils/breeding';
 import type { CatStat, RoomBreedingInfo, StatState } from '../utils/breeding';
+import type { ParsedCat } from '../utils/catParser';
+import { suggestFoundationPairs, summarizeRoster, sevensCount } from '../utils/breedingRoster';
+import type { PairSuggestion } from '../utils/breedingRoster';
 
 const PROGRESS_KEY = 'mg-clawset-breeding-progress';
 
@@ -64,11 +67,15 @@ const pill = (bg: string): CSSProperties => ({
 interface Props {
   rooms: PlacedFurniture[][];
   isRoomUnlocked: (i: number) => boolean;
+  /** Cats parsed from the loaded savegame (empty until one is imported). */
+  cats: ParsedCat[];
   /** Jump to a room in the designer. */
   onOpenRoom: (i: number) => void;
+  /** Trigger savegame import/reload. */
+  onLoadSavegame?: () => void;
 }
 
-export default function BreedingGuide({ rooms, isRoomUnlocked, onOpenRoom }: Props) {
+export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom, onLoadSavegame }: Props) {
   const [done, setDone] = useState<Set<string>>(loadProgress);
 
   useEffect(() => {
@@ -94,7 +101,16 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, onOpenRoom }: Pro
   const completedCount = done.size;
   const pct = Math.round((completedCount / TOTAL_STEPS) * 100);
 
-  const exampleCoverage = useMemo(() => pairCoverage(EXAMPLE_A, EXAMPLE_B, stim), [stim]);
+  const hasCats = cats.length > 0;
+  const roster = useMemo(() => (hasCats ? summarizeRoster(cats) : null), [cats, hasCats]);
+  const suggestions = useMemo(() => (hasCats ? suggestFoundationPairs(cats, stim, 6) : []), [cats, hasCats, stim]);
+
+  // The "cats you need" preview uses your best real pair when a save is loaded,
+  // otherwise a worked illustrative example.
+  const best = suggestions[0];
+  const previewA = best ? best.a.baseStats : EXAMPLE_A;
+  const previewB = best ? best.b.baseStats : EXAMPLE_B;
+  const previewCoverage = useMemo(() => pairCoverage(previewA, previewB, stim), [previewA, previewB, stim]);
   const abilities = abilityInheritanceChances(stim);
 
   return (
@@ -199,24 +215,40 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, onOpenRoom }: Pro
           </ul>
         </div>
 
-        {/* 4 — cats you need preview */}
+        {/* 4 — cats you need (real roster when a save is loaded) */}
         <div style={card}>
-          <h2 style={h2}>Cats you need (preview)</h2>
+          <h2 style={h2}>Cats you need {hasCats ? '— from your save' : '(preview)'}</h2>
           <p style={sub}>
             A <b>foundation pair</b> should, between both parents, cover every stat at 7. A stat is
             <span style={{ color: STATE_COLOR.locked, fontWeight: 700 }}> locked</span> when both parents have ≥7,
             <span style={{ color: STATE_COLOR.reachable, fontWeight: 700 }}> reachable</span> when one does, and
             <span style={{ color: STATE_COLOR.missing, fontWeight: 700 }}> missing</span> when neither does.
-            Worked example below (odds use your recommended room's Stimulation = {stim}).
+            Odds use your recommended room's Stimulation = {stim}.
           </p>
 
-          <CoverageGrid a={EXAMPLE_A} b={EXAMPLE_B} cov={exampleCoverage} />
+          {!hasCats && (
+            <div style={{ background: 'var(--social-bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 14, fontSize: 13 }}>
+              Showing a worked example.{' '}
+              {onLoadSavegame
+                ? <button onClick={onLoadSavegame} style={linkBtn}>Load your savegame</button>
+                : 'Load your savegame'}{' '}
+              to analyze your real cats, rank your best foundation pairs, and flag related cats.
+            </div>
+          )}
+
+          {best && (
+            <div style={{ fontSize: 13, marginBottom: 8 }}>
+              Your strongest unrelated pair: <b>{best.a.name}</b> ({best.a.sex}) × <b>{best.b.name}</b> ({best.b.sex})
+            </div>
+          )}
+
+          <CoverageGrid a={previewA} b={previewB} cov={previewCoverage} />
 
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 14, fontSize: 12 }}>
-            <div>Expected 7s per kitten: <b style={{ fontSize: 15, color: 'var(--accent)' }}>{exampleCoverage.coverage.toFixed(1)}/7</b></div>
-            {exampleCoverage.missing.length > 0 && (
+            <div>Expected 7s per kitten: <b style={{ fontSize: 15, color: 'var(--accent)' }}>{previewCoverage.coverage.toFixed(1)}/7</b></div>
+            {previewCoverage.missing.length > 0 && (
               <div style={{ color: STATE_COLOR.missing }}>
-                Still missing: <b>{exampleCoverage.missing.join(', ')}</b> → outcross for these (Stage 3).
+                Still missing: <b>{previewCoverage.missing.join(', ')}</b> → outcross for these (Stage 3).
               </div>
             )}
           </div>
@@ -230,6 +262,49 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, onOpenRoom }: Pro
             ))}
           </div>
         </div>
+
+        {/* roster-driven suggestions */}
+        {hasCats && roster && (
+          <div style={card}>
+            <h2 style={h2}>Your roster &amp; suggested foundation pairs</h2>
+            <p style={sub}>
+              {roster.total} cats in save · {roster.inHouse} in the house · {roster.males}♂ / {roster.females}♀.
+              Pairs below are the highest-coverage <b>unrelated</b> in-house matches (siblings &amp; parent/child are excluded automatically).
+            </p>
+
+            {suggestions.length === 0 ? (
+              <p style={{ fontSize: 13, color: STATE_COLOR.missing }}>
+                No viable unrelated in-house pairs found — bring in an unrelated stray (Stage 3) or check that cats are placed in the house.
+              </p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ textAlign: 'left', color: 'var(--text-m)', fontSize: 11 }}>
+                      <th style={th}>Pair</th>
+                      <th style={th}>Expected 7s</th>
+                      <th style={th}>Locked now</th>
+                      <th style={th}>Missing</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {suggestions.map((s) => <SuggestionRow key={`${s.a.dbKey}-${s.b.dbKey}`} s={s} />)}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)', margin: '18px 0 6px' }}>Top breeders (most 7s already)</h3>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {roster.topBreeders.map((c) => (
+                <span key={c.dbKey} title={CAT_STATS.map((st) => `${st} ${c.baseStats[st]}`).join(' · ')}
+                  style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6, background: 'var(--social-bg)', border: '1px solid var(--border)' }}>
+                  <b>{c.name}</b> <span style={{ color: 'var(--text-m)' }}>{c.sex} · {sevensCount(c)}×7 · {c.room || c.status}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* full staged plan */}
         <div style={card}>
@@ -263,8 +338,8 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, onOpenRoom }: Pro
         </div>
 
         <p style={{ fontSize: 11, color: 'var(--text-m)', textAlign: 'center', marginBottom: 24 }}>
-          Method adapted from the Perfect 7 Planner in frankieg33/MewgenicsBreedingManager.
-          Cat-stat data is illustrative — mg-clawset reads furniture, not cats, for now.
+          Method + cat-save parsing adapted from frankieg33/MewgenicsBreedingManager (Perfect 7 Planner).
+          {hasCats ? ' Roster read from your loaded savegame.' : ' Load a savegame to analyze your real cats.'}
         </p>
       </div>
     </div>
@@ -288,6 +363,21 @@ function RoomRow({ r, best, onOpen }: { r: RoomBreedingInfo; best: boolean; onOp
           : <span style={{ color: STATE_COLOR.missing }}>✗ auto-fail (Comfort &lt; -10)</span>}
       </td>
       <td style={td}><button onClick={onOpen} style={linkBtn}>Open →</button></td>
+    </tr>
+  );
+}
+
+function SuggestionRow({ s }: { s: PairSuggestion }) {
+  return (
+    <tr style={{ borderTop: '1px solid var(--border)' }}>
+      <td style={td}>
+        <b style={{ color: 'var(--text-h)' }}>{s.a.name}</b> <span style={{ color: 'var(--text-m)' }}>({s.a.sex})</span>
+        {' × '}
+        <b style={{ color: 'var(--text-h)' }}>{s.b.name}</b> <span style={{ color: 'var(--text-m)' }}>({s.b.sex})</span>
+      </td>
+      <td style={td}><b style={{ color: 'var(--accent)' }}>{s.coverage.coverage.toFixed(1)}/7</b></td>
+      <td style={{ ...td, color: STATE_COLOR.locked }}>{s.coverage.locked.length ? s.coverage.locked.join(', ') : '—'}</td>
+      <td style={{ ...td, color: s.missing.length ? STATE_COLOR.missing : 'var(--text-m)' }}>{s.missing.length ? s.missing.join(', ') : 'none ✓'}</td>
     </tr>
   );
 }

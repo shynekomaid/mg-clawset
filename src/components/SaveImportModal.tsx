@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { parseSavegame } from '../utils/savegame';
 import type { HouseInfo, SavedPlacement } from '../utils/savegame';
+import type { ParsedCat } from '../utils/catParser';
 
 const overlay: CSSProperties = {
   position: 'fixed',
@@ -102,7 +103,7 @@ const statusText: CSSProperties = {
 interface Props {
   open: boolean;
   onClose: () => void;
-  onImport: (ownership: Record<string, number> | null, houseInfo: HouseInfo | null, placements: SavedPlacement[] | null) => void;
+  onImport: (ownership: Record<string, number> | null, houseInfo: HouseInfo | null, placements: SavedPlacement[] | null, cats?: ParsedCat[]) => void;
   furnitureIdMap: Map<string, string>; // lowercase name -> id
   /** Called when the file was picked via the File System Access API (Chromium) so the handle can be remembered. */
   onHandleCaptured?: (handle: FileSystemFileHandle) => void;
@@ -131,12 +132,12 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
       const uint8Array = new Uint8Array(arrayBuffer);
 
       setStatus('Parsing furniture data...');
-      const { ownership: newOwnership, matched, unmatchedNames, houseInfo, placements } = await parseSavegame(uint8Array, furnitureIdMap);
+      const { ownership: newOwnership, matched, unmatchedNames, houseInfo, placements, cats } = await parseSavegame(uint8Array, furnitureIdMap);
 
-      console.log('[SaveImport] Matched:', matched, 'Unmatched:', unmatchedNames, 'House:', houseInfo, 'Placed:', placements.length);
+      console.log('[SaveImport] Matched:', matched, 'Unmatched:', unmatchedNames, 'House:', houseInfo, 'Placed:', placements.length, 'Cats:', cats.length);
 
-      setStatus(`Found ${matched} furniture types (${unmatchedNames.length} unmatched, ${placements.length} placed in rooms). Importing...`);
-      onImport(importItems ? newOwnership : null, importUnlocks ? houseInfo : null, importLayouts ? placements : null);
+      setStatus(`Found ${matched} furniture types, ${cats.length} cats. Importing...`);
+      onImport(importItems ? newOwnership : null, importUnlocks ? houseInfo : null, importLayouts ? placements : null, cats);
 
       setTimeout(() => {
         setStatus('');
