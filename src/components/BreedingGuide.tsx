@@ -8,7 +8,11 @@ import {
   nextStep,
   analyzeRoomsForBreeding,
   recommendBreedingRoom,
+  recommendFightClubRoom,
   isDependableDen,
+  stimGuarantees,
+  STIM_BREAKPOINTS,
+  COMFORT_FREE_OCCUPANCY,
   pairCoverage,
   betterStatChance,
   abilityInheritanceChances,
@@ -80,7 +84,9 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
     [rooms, isRoomUnlocked],
   );
   const recommended = useMemo(() => recommendBreedingRoom(roomInfos), [roomInfos]);
+  const fightClub = useMemo(() => recommendFightClubRoom(roomInfos), [roomInfos]);
   const stim = recommended?.stimulation ?? 0;
+  const guarantees = stimGuarantees(stim);
 
   const hasCats = cats.length > 0;
   const roster = useMemo(() => (hasCats ? summarizeRoster(cats) : null), [cats, hasCats]);
@@ -180,11 +186,20 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
               {/* where to put them */}
               <div style={{ marginTop: 12, fontSize: 13 }}>
                 {recommended ? (
-                  <span>
-                    Move them together into{' '}
-                    <button onClick={() => onOpenRoom(recommended.index)} style={linkBtn}>{recommended.label}</button>{' '}
-                    — Stimulation <b>{recommended.stimulation}</b> ({Math.round(recommended.betterChance * 100)}% better-stat odds), Comfort <b>{recommended.comfort}</b>.
-                  </span>
+                  <>
+                    <span>
+                      Move them together into{' '}
+                      <button onClick={() => onOpenRoom(recommended.index)} style={linkBtn}>{recommended.label}</button>{' '}
+                      — Stimulation <b>{recommended.stimulation}</b> ({Math.round(recommended.betterChance * 100)}% better-stat odds), Comfort <b>{recommended.comfort}</b>.
+                    </span>
+                    <div style={{ marginTop: 6, color: 'var(--text-m)', fontSize: 12 }}>
+                      Keep this room at ≤{COMFORT_FREE_OCCUPANCY} cats — each extra cat (and each poop) costs 1 Comfort.{' '}
+                      Guarantees at stim {recommended.stimulation}:{' '}
+                      <GuaranteeTag on={guarantees.firstActive} label={`1st active (≥${STIM_BREAKPOINTS.firstActive})`} />{' '}
+                      <GuaranteeTag on={guarantees.passive} label={`passive (≥${STIM_BREAKPOINTS.passive})`} />{' '}
+                      <GuaranteeTag on={guarantees.secondActive} label={`2nd active (≥${STIM_BREAKPOINTS.secondActive})`} />
+                    </div>
+                  </>
                 ) : (
                   <span style={{ color: STATE_COLOR.missing }}>
                     No viable breeding room yet — build one with Comfort ≥ -10 in the House view first.
@@ -278,6 +293,25 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
             <p style={{ fontSize: 12, color: 'var(--text-m)', margin: '10px 0 0' }}>
               At Stimulation {stim}: better-stat inheritance {Math.round(betterStatChance(stim) * 100)}%,
               first-ability {Math.round(abilities.firstActive * 100)}%, passive {Math.round(abilities.passive * 100)}%.
+              Stimulation guarantees kick in at {STIM_BREAKPOINTS.firstActive} (1st active),
+              {' '}{STIM_BREAKPOINTS.passive} (passive), {STIM_BREAKPOINTS.secondActive} (2nd active).
+            </p>
+            <p style={{ fontSize: 12, color: 'var(--text-m)', margin: '8px 0 0' }}>
+              <b>Den occupancy:</b> keep each breeding room at ≤{COMFORT_FREE_OCCUPANCY} cats (two pairs).
+              Every cat past the {COMFORT_FREE_OCCUPANCY}th — and every poop — drops Comfort by 1, which slows breeding.
+            </p>
+            {fightClub && (
+              <p style={{ fontSize: 12, color: 'var(--text-m)', margin: '8px 0 0' }}>
+                <b>Training room (optional):</b> the opposite of a den — a deliberately low-Comfort room makes cats
+                spar and gain combat stats (level/item stats, not the base 7). Your lowest-Comfort room is{' '}
+                <button onClick={() => onOpenRoom(fightClub.index)} style={linkBtn}>{fightClub.label}</button>{' '}
+                (Comfort {fightClub.comfort}). Park mediocre cats there to grow champions for adventures.
+              </p>
+            )}
+            <p style={{ fontSize: 12, color: 'var(--text-m)', margin: '8px 0 0' }}>
+              <b>Body genetics:</b> head/body shapes also inherit (triangle heads lean Intelligence/mage,
+              square heads lean Defense/tank) — pick parents whose shapes match the role you want.
+              The guide tracks the seven base stats only; shape data isn't parsed from the save yet.
             </p>
 
             {/* cats you need — coverage grid for the selected pair */}
@@ -408,6 +442,15 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
         </aside>
       </div>
     </div>
+  );
+}
+
+/** Inline ✓/✗ chip for a stimulation guarantee. */
+function GuaranteeTag({ on, label }: { on: boolean; label: string }) {
+  return (
+    <span style={{ color: on ? STATE_COLOR.locked : STATE_COLOR.missing, fontWeight: 600, whiteSpace: 'nowrap' }}>
+      {on ? '✓' : '✗'} {label}
+    </span>
   );
 }
 

@@ -5,6 +5,11 @@ import {
   pairCoverage,
   analyzeRoomsForBreeding,
   recommendBreedingRoom,
+  isDependableDen,
+  stimGuarantees,
+  effectiveComfort,
+  recommendFightClubRoom,
+  DEPENDABLE_DEN_STIM,
   offspringCoi,
   defectRiskPercent,
   maladyBreakdown,
@@ -87,6 +92,47 @@ describe('room recommendation', () => {
     const infos = analyzeRoomsForBreeding([room(99, 0), room(10, 0)], (i) => i === 1);
     expect(infos).toHaveLength(1);
     expect(infos[0].stimulation).toBe(10);
+  });
+});
+
+describe('dependable den + stim breakpoints', () => {
+  it('anchors the dependable-den bar to the 1st-active breakpoint (32)', () => {
+    expect(DEPENDABLE_DEN_STIM).toBe(32);
+    const [low, ok] = analyzeRoomsForBreeding([room(31, 0), room(32, 0)], () => true);
+    expect(isDependableDen(low)).toBe(false); // stim 31 < 32
+    expect(isDependableDen(ok)).toBe(true);   // stim 32, comfort viable
+    expect(isDependableDen(null)).toBe(false);
+  });
+
+  it('does not count a viable-but-low-stim room as dependable', () => {
+    const [info] = analyzeRoomsForBreeding([room(0, 10)], () => true); // comfy but no stim
+    expect(info.viable).toBe(true);
+    expect(isDependableDen(info)).toBe(false);
+  });
+
+  it('reports which inheritances a stim guarantees', () => {
+    expect(stimGuarantees(20)).toEqual({ firstActive: false, passive: false, secondActive: false });
+    expect(stimGuarantees(32)).toEqual({ firstActive: true, passive: false, secondActive: false });
+    expect(stimGuarantees(95)).toEqual({ firstActive: true, passive: true, secondActive: false });
+    expect(stimGuarantees(196)).toEqual({ firstActive: true, passive: true, secondActive: true });
+  });
+});
+
+describe('comfort occupancy (4-cat rule)', () => {
+  it('charges 1 comfort per cat past the 4th', () => {
+    expect(effectiveComfort(8, 4)).toBe(8);  // two pairs, no penalty
+    expect(effectiveComfort(8, 6)).toBe(6);  // 2 over → -2
+    expect(effectiveComfort(8, 2)).toBe(8);  // under 4, no bonus
+  });
+});
+
+describe('fight club room', () => {
+  it('picks the lowest-comfort room for stat training', () => {
+    const infos = analyzeRoomsForBreeding([room(80, 10), room(20, -5), room(50, 2)], () => true);
+    expect(recommendFightClubRoom(infos)?.comfort).toBe(-5);
+  });
+  it('is null with no rooms', () => {
+    expect(recommendFightClubRoom([])).toBeNull();
   });
 });
 

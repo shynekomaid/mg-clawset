@@ -269,16 +269,71 @@ export function recommendBreedingRoom(infos: RoomBreedingInfo[]): RoomBreedingIn
 }
 
 /**
- * Stimulation a room needs to count as a *dependable* breeding den, not merely
- * a viable one. At stim 50 the better-stat chance is 60%; below that, kittens
- * inherit the weaker parent nearly as often as the stronger, so the line barely
- * advances. A den you commit your breeding program to should clear this bar.
+ * Stimulation breakpoints the game *guarantees* an inheritance at (community
+ * wiki + Steam guides). Below a breakpoint the corresponding ability/passive is
+ * only a chance (see abilityInheritanceChances); at or above it, every kitten
+ * gets it. `firstActive` (32) is the first one worth building a den around.
  */
-export const DEPENDABLE_DEN_STIM = 50;
+export const STIM_BREAKPOINTS = {
+  firstActive: 32,
+  passive: 95,
+  secondActive: 196,
+} as const;
+
+export interface StimGuarantees {
+  /** 1st active ability guaranteed (stim ≥ 32). */
+  firstActive: boolean;
+  /** Passive guaranteed (stim ≥ 95). */
+  passive: boolean;
+  /** 2nd active ability guaranteed (stim ≥ 196). */
+  secondActive: boolean;
+}
+
+/** Which inheritances a room's Stimulation guarantees outright. */
+export function stimGuarantees(stim: number): StimGuarantees {
+  return {
+    firstActive: stim >= STIM_BREAKPOINTS.firstActive,
+    passive: stim >= STIM_BREAKPOINTS.passive,
+    secondActive: stim >= STIM_BREAKPOINTS.secondActive,
+  };
+}
+
+/**
+ * Stimulation a room needs to count as a *dependable* breeding den, not merely
+ * a viable one. Anchored to the first real game breakpoint: at stim 32 every
+ * kitten inherits a 1st active ability and the better-stat chance is ~56%.
+ * Below that, lines barely advance. A den you commit a program to clears this.
+ */
+export const DEPENDABLE_DEN_STIM = STIM_BREAKPOINTS.firstActive;
 
 /** A room worth running the whole breeding program in: viable and stimulating. */
 export function isDependableDen(info: RoomBreedingInfo | null): boolean {
   return !!info && info.viable && info.stimulation >= DEPENDABLE_DEN_STIM;
+}
+
+/**
+ * Cats past the 4th in a room each cost 1 Comfort (every guide's "keep breeding
+ * rooms at exactly 4 cats" rule; poop costs more on top). A den's *effective*
+ * Comfort for breeding therefore drops as it gets crowded — two breeding pairs
+ * (4 cats) is the sweet spot.
+ */
+export const COMFORT_FREE_OCCUPANCY = 4;
+
+/** Room Comfort after the over-4 occupancy penalty (excludes poop, unknown from save). */
+export function effectiveComfort(baseComfort: number, occupancy: number): number {
+  return baseComfort - Math.max(0, occupancy - COMFORT_FREE_OCCUPANCY);
+}
+
+/**
+ * A training ("fight club") room is the opposite of a den: deliberately LOW
+ * Comfort so cats spar and gain combat stats (level/item stats, not the base 7).
+ * Pick the lowest-Comfort unlocked room, tie-broken by lowest Stimulation.
+ */
+export function recommendFightClubRoom(infos: RoomBreedingInfo[]): RoomBreedingInfo | null {
+  if (infos.length === 0) return null;
+  return infos.reduce((low, r) =>
+    r.comfort < low.comfort || (r.comfort === low.comfort && r.stimulation < low.stimulation) ? r : low,
+  );
 }
 
 // ── The Perfect 7 method (the 4-stage plan, as actionable steps) ────────────
