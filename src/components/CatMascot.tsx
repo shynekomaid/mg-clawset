@@ -369,7 +369,7 @@ export default function CatMascot({ compact, isMobile, onLoadSavegame }: Props) 
                   }}
                   onClick={() => { dismissHelp(); onLoadSavegame(); }}
                 >
-                  📂 Load savegame
+                  Load savegame
                 </div>
               )}
               <div

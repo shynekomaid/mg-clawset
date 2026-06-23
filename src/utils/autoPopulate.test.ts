@@ -206,6 +206,35 @@ describe('autoPopulateRoom', () => {
     }
   });
 
+  it('keep-search premise: varying seeds explore layouts; best across seeds >= greedy', () => {
+    // The App "Keep searching" loop runs one fixed-iteration pass per seed and
+    // keeps the highest-scoring result. This verifies the two properties that
+    // loop relies on: different seeds can yield different layouts (so passes
+    // actually explore), and the best of many seeds never beats-down greedy.
+    const square = makeItem({ name: 'square', comfort: 8, shape: [[2, 2], [2, 2]] });
+    const lpiece = makeItem({ name: 'lpiece', comfort: 7, shape: [[2, 1], [2, 1], [2, 2]] });
+    const bar = makeItem({ name: 'bar', comfort: 5, shape: [[2, 2, 2]] });
+    const dot = makeItem({ name: 'dot', comfort: 1, shape: [[2]] });
+    const pool = {
+      allFurniture: [square, lpiece, bar, dot],
+      ownership: { square: 10, lpiece: 10, bar: 10, dot: 30 },
+    };
+    const score = (r: PlacedFurniture[]) => r.reduce((s, p) => s + statScore(p.item, { comfort: 1, stimulation: 1 }), 0);
+
+    const greedyScore = score(autoPopulateRoom(makeOpts({ ...pool })));
+    const layouts: string[] = [];
+    let best = -Infinity;
+    for (let seed = 1; seed <= 8; seed++) {
+      const r = autoPopulateRoom(makeOpts({ ...pool, algorithm: 'maximize', seed, iterations: 25 }));
+      layouts.push(r.map((p) => `${p.item.id}@${p.row},${p.col}`).sort().join('|'));
+      best = Math.max(best, score(r));
+    }
+    // exploration: not every seed collapses to the identical placement
+    expect(new Set(layouts).size).toBeGreaterThan(1);
+    // keeping the best is at least as good as the greedy baseline
+    expect(best).toBeGreaterThanOrEqual(greedyScore);
+  });
+
   it('maximize: anchored pieces remain supported after ruin-and-recreate', () => {
     const shelf = makeItem({ name: 'shelf', comfort: 2, shape: [[3]] });
     const hanging = makeItem({ name: 'hanging', comfort: 6, shape: [[4], [2]] });

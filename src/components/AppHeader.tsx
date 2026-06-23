@@ -69,13 +69,13 @@ export default function AppHeader({ onHome, onLoadSavegame, hasOwnership, savefi
       {view && onViewChange && (
         <div style={{ display: 'flex', gap: 4, marginLeft: 24 }}>
           <button style={tabBtn(view === 'house')} onClick={() => onViewChange('house')} title="Design rooms and auto-fill the house">
-            🏠 House & Rooms
+            House &amp; Rooms
           </button>
           <button style={tabBtn(view === 'furniture')} onClick={() => onViewChange('furniture')} title="Browse and edit your furniture collection">
-            🪑 Furniture
+            Furniture
           </button>
           <button style={tabBtn(view === 'breeding')} onClick={() => onViewChange('breeding')} title="Perfect 7 breeding guide with room recommendations">
-            🧬 Breeding Guide
+            Breeding Guide
           </button>
         </div>
       )}
@@ -86,7 +86,7 @@ export default function AppHeader({ onHome, onLoadSavegame, hasOwnership, savefi
         disabled={reloading}
         title={savefileName ? `Re-reads ${savefileName} from disk` : 'Import owned furniture from your Mewgenics save file'}
       >
-        📂 {reloading ? 'Reloading…' : hasOwnership || savefileName ? 'Re-load savegame' : 'Load savegame'}
+        {reloading ? 'Reloading…' : hasOwnership || savefileName ? 'Re-load savegame' : 'Load savegame'}
       </button>
     </div>
   );

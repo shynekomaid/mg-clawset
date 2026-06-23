@@ -162,7 +162,7 @@ export default function RoomStatsSummary({ rooms, activeRoom, onActiveRoomChange
           return (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px', fontSize: 11, color: 'var(--text-m)', opacity: 0.55 }}>
               <span style={{ fontWeight: 600, minWidth: 48 }}>{getRoomLabel(i)}</span>
-              <span>🔒 not yet unlocked in game</span>
+              <span>Locked — not yet unlocked in game</span>
             </div>
           );
         }

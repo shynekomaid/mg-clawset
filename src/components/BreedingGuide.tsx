@@ -139,12 +139,12 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
-      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap', maxWidth: 1120, margin: '0 auto' }}>
+      <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
         <div style={{ flex: '1 1 520px', minWidth: 0 }}>
         {/* Intro */}
         <div style={{ marginBottom: 16 }}>
           <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-h)', margin: '0 0 4px' }}>
-            🧬 Breeding Guide — Perfect 7
+            Breeding Guide — Perfect 7
           </h1>
           <p style={{ fontSize: 13, color: 'var(--text-m)', margin: 0, lineHeight: 1.5 }}>
             Goal: a self-sustaining stable — maxed cats of both sexes and a dependable breeding
@@ -188,14 +188,14 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
 
               {/* where the two cats are right now */}
               <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', marginTop: 12, fontSize: 13, color: 'var(--text)' }}>
-                <span>📍 <b>{selected.a.name}</b> is in <b>{prettyRoom(selected.a)}</b></span>
-                <span>📍 <b>{selected.b.name}</b> is in <b>{prettyRoom(selected.b)}</b></span>
+                <span><b>{selected.a.name}</b> is in <b>{prettyRoom(selected.a)}</b></span>
+                <span><b>{selected.b.name}</b> is in <b>{prettyRoom(selected.b)}</b></span>
               </div>
 
               {/* class / role of each parent (heritable body genetics) */}
               {(selected.a.catClass || selected.b.catClass) && (
                 <div style={{ marginTop: 8, fontSize: 13, color: 'var(--text-m)' }}>
-                  🎭 Class: <b style={{ color: 'var(--text)' }}>{selected.a.name}</b> {selected.a.catClass || 'classless'}
+                  Class: <b style={{ color: 'var(--text)' }}>{selected.a.name}</b> {selected.a.catClass || 'classless'}
                   {' · '}<b style={{ color: 'var(--text)' }}>{selected.b.name}</b> {selected.b.catClass || 'classless'}
                   {selected.a.catClass && selected.a.catClass === selected.b.catClass && (
                     <span style={{ color: STATE_COLOR.locked }}> — both {selected.a.catClass}, breeds toward that role</span>
@@ -412,7 +412,7 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
                   const isNext = next?.step.id === step.id;
                   return (
                     <div key={step.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 8, background: isNext ? 'var(--accent-bg)' : checked ? 'var(--social-bg)' : 'transparent', border: isNext ? '1px solid var(--accent)' : '1px solid transparent', marginBottom: 4 }}>
-                      <span style={{ marginTop: 1, fontSize: 14 }}>{checked ? '✅' : isNext ? '➡️' : '⬜'}</span>
+                      <span style={{ marginTop: 1, fontSize: 14 }}>{checked ? '✓' : isNext ? '▸' : '○'}</span>
                       <span>
                         <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-h)', textDecoration: checked ? 'line-through' : 'none', opacity: checked ? 0.6 : 1 }}>{step.title}</span>
                         <span style={{ display: 'block', fontSize: 12, color: 'var(--text-m)', marginTop: 2, lineHeight: 1.45 }}>{step.detail}</span>
@@ -451,7 +451,7 @@ export default function BreedingGuide({ rooms, isRoomUnlocked, cats, onOpenRoom,
                         background: isNext ? 'var(--accent-bg)' : 'transparent',
                         fontWeight: isNext ? 700 : 500,
                         color: isNext ? 'var(--accent)' : checked ? 'var(--text-m)' : 'var(--text)' }}>
-                      <span style={{ fontSize: 12 }}>{checked ? '✅' : isNext ? '➡️' : '⬜'}</span>
+                      <span style={{ fontSize: 12 }}>{checked ? '✓' : isNext ? '▸' : '○'}</span>
                       <span style={{ textDecoration: checked ? 'line-through' : 'none' }}>{step.short}</span>
                     </div>
                   );

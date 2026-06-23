@@ -186,7 +186,7 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
         </div>
 
         <div style={warningBox}>
-          ⚠ This will overwrite your current inventory data. Any manually added counts will be replaced.
+          Warning: this will overwrite your current inventory data. Any manually added counts will be replaced.
         </div>
 
         <input
@@ -232,7 +232,7 @@ export default function SaveImportModal({ open, onClose, onImport, furnitureIdMa
             }
           }}
         >
-          {file ? `📁 ${file.name}` : 'Click to select your .sav file — or drag it here'}
+          {file ? file.name : 'Click to select your .sav file — or drag it here'}
         </label>
 
         <p style={{ ...paragraph, fontSize: 11, color: 'var(--text-m)', marginTop: 6 }}>

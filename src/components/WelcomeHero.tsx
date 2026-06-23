@@ -69,7 +69,7 @@ export default function WelcomeHero({ onLoadSavegame, onBrowse }: Props) {
           Design your house rooms with the furniture you actually own — auto-filled for the stats you care about.
         </div>
         <button style={primaryBtn} onClick={onLoadSavegame}>
-          📂 Load savegame
+          Load savegame
         </button>
         <button style={secondaryBtn} onClick={onBrowse}>
           Browse without a save

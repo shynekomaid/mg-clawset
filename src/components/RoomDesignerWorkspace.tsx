@@ -5,7 +5,7 @@ import RoomGrid from './RoomGrid';
 import RoomStatsSummary from './RoomStatsSummary';
 import { getRoomLabel, HOUSE_VIEW, ATTIC_INDEX } from '../types/furniture';
 import { captureRoom, captureHouse } from '../utils/roomCapture';
-import { ALGORITHMS, ALL_STATS, STAT_LABELS } from '../utils/autoPopulate';
+import { ALL_STATS, STAT_LABELS } from '../utils/autoPopulate';
 import type { AlgorithmKey, StatWeights, RoomFillPlan } from '../utils/autoPopulate';
 import type { StatKey } from '../types/furniture';
 import StatIcon from './StatIcon';
@@ -69,6 +69,7 @@ interface Props {
   onAutoPopulate: (config: {
     algorithm: AlgorithmKey;
     plans: RoomFillPlan[];
+    keepSearching?: boolean;
   }) => void;
   ownership: Record<string, number>;
   drawerOpen: boolean;
@@ -82,6 +83,10 @@ interface Props {
   fillProgress?: number | null;
   /** Quality summary of the last auto-fill. */
   fillReport?: string | null;
+  /** Live state while a "keep searching" run is in flight; null when idle. */
+  fillSearch?: { passes: number; bestScore: number } | null;
+  /** Stop the keep-searching run and apply the best result so far. */
+  onStopSearch?: () => void;
   /** Undo/redo for room mutations; undefined = nothing to un/redo. */
   onUndo?: () => void;
   onRedo?: () => void;
@@ -92,19 +97,34 @@ interface Props {
 export default function RoomDesignerWorkspace({
   visible, placed, rooms, activeRoom, onActiveRoomChange,
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
-  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox, fillProgress = null, fillReport = null, onUndo, onRedo, onEmptyRooms,
+  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox, fillProgress = null, fillReport = null,
+  fillSearch = null, onStopSearch, onUndo, onRedo, onEmptyRooms,
 }: Props) {
   const [expertView, setExpertView] = useState(false);
-  const [presetKey, setPresetKey] = useState<FillPresetKey | 'custom'>('breeding');
+  // single-room fill: a preset acts as an editable starting point. 'blank' =
+  // start from zero. `presetModified` flags hand-edited stats so the label can
+  // show "(modified)" while the preset's floor/idol still apply.
+  const [presetKey, setPresetKey] = useState<FillPresetKey | 'blank'>('breeding');
+  const [presetModified, setPresetModified] = useState(false);
   // house fill: independent preset per room
   const [roomPresets, setRoomPresets] = useState<Record<number, FillPresetKey | 'custom' | 'skip'>>({});
   // per-room stat weights for rooms set to 'custom' in the house fill
   const [roomWeights, setRoomWeights] = useState<Record<number, Record<StatKey, -1 | 0 | 1>>>({});
+  // per-room idol picks for the house fill (in addition to a preset's auto-idol)
+  const [roomIdols, setRoomIdols] = useState<Record<number, Set<string>>>({});
+  // per-room "include a food box" toggle for the house fill
+  const [roomFood, setRoomFood] = useState<Record<number, boolean>>({});
   const [statWeights, setStatWeights] = useState<Record<StatKey, -1 | 0 | 1>>(
     () => ({ ...EMPTY_WEIGHTS, ...FILL_PRESETS.breeding.tristate }),
   );
   const [includeFood, setIncludeFood] = useState(false);
-  const [algorithm, setAlgorithm] = useState<AlgorithmKey>('maximize');
+  // Search is always the randomized "maximize" — fast enough that the old
+  // Quick/Maximize choice wasn't worth a widget.
+  const algorithm: AlgorithmKey = 'maximize';
+  // when set, "Fill" runs repeated passes until the user clicks "Use best".
+  const [keepSearching, setKeepSearching] = useState(false);
+  // house two-pane: which room the detail drawer is editing (null = first)
+  const [detailRoom, setDetailRoom] = useState<number | null>(null);
   const [selectedIdols, setSelectedIdols] = useState<Set<string>>(() => new Set());
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [hoverItem, setHoverItem] = useState<string | null>(null);
@@ -198,9 +218,12 @@ export default function RoomDesignerWorkspace({
     setHoverItem(id);
   };
 
+  // Load a preset as an editable starting point: its stats fill the chips and
+  // its floor/idol travel with it (kept even after the user edits the stats).
   const applyPreset = (key: FillPresetKey) => {
     const preset = FILL_PRESETS[key];
     setPresetKey(key);
+    setPresetModified(false);
     setStatWeights({ ...EMPTY_WEIGHTS, ...preset.tristate });
     if (preset.autoIdolKey) {
       const idol = idols.find((i) => i.image_url.includes(preset.autoIdolKey!) && (ownership[i.id] || 0) > 0);
@@ -208,8 +231,16 @@ export default function RoomDesignerWorkspace({
     }
   };
 
+  // Start from zero: no stats, no floor.
+  const selectBlank = () => {
+    setPresetKey('blank');
+    setPresetModified(false);
+    setStatWeights({ ...EMPTY_WEIGHTS });
+  };
+
+  // Editing a stat keeps the active preset's floor/idol but marks it modified.
   const cycleStat = (stat: StatKey) => {
-    setPresetKey('custom');
+    if (presetKey !== 'blank') setPresetModified(true);
     setStatWeights((prev) => ({
       ...prev,
       [stat]: prev[stat] === 0 ? 1 : prev[stat] === 1 ? -1 : 0,
@@ -228,8 +259,30 @@ export default function RoomDesignerWorkspace({
   const activeWeights: StatWeights = Object.fromEntries(
     ALL_STATS.filter((st) => statWeights[st] !== 0).map((st) => [st, statWeights[st]]),
   );
-  const minStats = presetKey !== 'custom' ? FILL_PRESETS[presetKey].minStats : undefined;
+  const minStats = presetKey !== 'blank' ? FILL_PRESETS[presetKey].minStats : undefined;
   const hasPositiveWeight = ALL_STATS.some((st) => statWeights[st] > 0);
+
+  // Owned idols only — what the per-room and single-room idol pickers can offer.
+  const ownedIdols = idols.filter((i) => (ownership[i.id] || 0) > 0);
+  // A house room's idol selection: the user's pick if set, else the preset's
+  // auto-idol pre-selected (so presets "just work" but stay overridable).
+  const roomIdolsFor = (ri: number): Set<string> => {
+    if (roomIdols[ri]) return roomIdols[ri];
+    const choice = roomChoice(ri);
+    if (choice !== 'custom' && choice !== 'skip') {
+      const key = FILL_PRESETS[choice].autoIdolKey;
+      const idol = key ? ownedIdols.find((i) => i.image_url.includes(key)) : undefined;
+      if (idol) return new Set([idol.id]);
+    }
+    return new Set();
+  };
+  const toggleRoomIdol = (ri: number, id: string) => {
+    setRoomIdols((prev) => {
+      const cur = new Set(prev[ri] ?? roomIdolsFor(ri));
+      if (cur.has(id)) cur.delete(id); else cur.add(id);
+      return { ...prev, [ri]: cur };
+    });
+  };
 
   const unlockedRooms = ([ATTIC_INDEX, 0, 1, 2, 3] as number[]).filter(isRoomUnlocked);
   // default to one of each preset, remaining rooms start as custom
@@ -247,6 +300,12 @@ export default function RoomDesignerWorkspace({
       return { ...prev, [ri]: { ...cur, [stat]: cur[stat] === 0 ? 1 : cur[stat] === 1 ? -1 : 0 } };
     });
   };
+  // The house two-pane always shows a drawer; fall back to the first room when
+  // nothing is explicitly selected (or the selection is no longer unlocked).
+  const drawerRoom = detailRoom != null && unlockedRooms.includes(detailRoom)
+    ? detailRoom
+    : (unlockedRooms[0] ?? 0);
+
   // custom rooms need at least one maximized stat; presets always have one
   const fillReady = activeRoom === HOUSE_VIEW
     ? unlockedRooms.some((ri) => roomChoice(ri) !== 'skip')
@@ -258,22 +317,24 @@ export default function RoomDesignerWorkspace({
     for (const ri of unlockedRooms) {
       const choice = roomChoice(ri);
       if (choice === 'skip') continue;
+      // idols (preset auto-idol pre-selected, user-overridable) + optional food
+      const mustInclude = [
+        ...roomIdolsFor(ri),
+        ...(roomFood[ri] && foodBox ? [foodBox.id] : []),
+      ];
       if (choice === 'custom') {
         const w = roomWeightsFor(ri);
         const weights: StatWeights = Object.fromEntries(
           ALL_STATS.filter((st) => w[st] !== 0).map((st) => [st, w[st]]),
         );
-        plans.push({ roomIndex: ri, weights, mustInclude: [] });
+        plans.push({ roomIndex: ri, weights, mustInclude });
         continue;
       }
       const preset = FILL_PRESETS[choice];
-      const autoIdol = preset.autoIdolKey
-        ? idols.find((i) => i.image_url.includes(preset.autoIdolKey!) && (ownership[i.id] || 0) > 0)
-        : undefined;
       plans.push({
         roomIndex: ri,
         weights: Object.fromEntries(Object.entries(preset.tristate)) as StatWeights,
-        mustInclude: autoIdol ? [autoIdol.id] : [],
+        mustInclude,
         minStats: preset.minStats,
       });
     }
@@ -298,13 +359,15 @@ export default function RoomDesignerWorkspace({
       ) {
         return;
       }
-      onAutoPopulate({ algorithm, plans });
+      onAutoPopulate({ algorithm, plans, keepSearching });
       return;
     }
     const statText = ALL_STATS.filter((st) => statWeights[st] !== 0)
       .map((st) => `${statWeights[st] > 0 ? '+' : '\u2212'}${STAT_LABELS[st]}`)
       .join(' ');
-    const label = presetKey !== 'custom' ? FILL_PRESETS[presetKey].label : statText;
+    const label = presetKey !== 'blank'
+      ? `${FILL_PRESETS[presetKey].label}${presetModified ? ' (modified)' : ''}`
+      : statText;
     if (
       placed.length > 0 &&
       !window.confirm(`Replace ${placed.length} item(s) in ${getRoomLabel(activeRoom)} with an auto-generated "${label}" layout?`)
@@ -318,6 +381,7 @@ export default function RoomDesignerWorkspace({
     onAutoPopulate({
       algorithm,
       plans: [{ roomIndex: activeRoom, weights: activeWeights, mustInclude, minStats }],
+      keepSearching,
     });
   };
 
@@ -344,7 +408,7 @@ export default function RoomDesignerWorkspace({
             color: weights[stat] !== 0 ? '#fff' : 'var(--text-m)',
           }}
         >
-          <StatIcon stat={stat} size={13} />
+          <StatIcon stat={stat} size={15} />
           {STAT_LABELS[stat]}
           {weights[stat] === 1 ? ' +' : weights[stat] === -1 ? ' \u2212' : ''}
         </button>
@@ -352,6 +416,46 @@ export default function RoomDesignerWorkspace({
     </div>
   );
   const statChips = renderStatChips(statWeights, cycleStat);
+
+  // A house room's effective tristate weights (preset's, or the custom ones).
+  const roomEffectiveWeights = (ri: number): Record<StatKey, -1 | 0 | 1> => {
+    const choice = roomChoice(ri);
+    if (choice === 'custom') return roomWeightsFor(ri);
+    if (choice === 'skip') return EMPTY_WEIGHTS;
+    return { ...EMPTY_WEIGHTS, ...FILL_PRESETS[choice].tristate };
+  };
+
+  // Read-only stat summary for the house room list. Each token is icon-only;
+  // hovering floats the full stat name as an overlay (see .af-tok in index.css)
+  // so the inline footprint never changes and sibling icons stay put.
+  const SUMMARY_ICON = 15;
+  const renderWeightSummary = (weights: Record<StatKey, -1 | 0 | 1>, minStats?: Partial<Record<StatKey, number>>) => {
+    const active = ALL_STATS.filter((st) => weights[st] !== 0);
+    if (active.length === 0 && !minStats) {
+      return <span style={{ fontSize: 12, color: 'var(--blushed-brick)' }}>set stats ▾</span>;
+    }
+    return (
+      <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {active.map((st) => {
+          const max = weights[st] === 1;
+          return (
+            <span key={st} className="af-tok" style={{ color: max ? STAT_COLORS[st] : 'var(--lavender-grey)' }}>
+              <StatIcon stat={st} size={SUMMARY_ICON} />
+              <span style={{ marginLeft: 1 }}>{max ? '+' : '−'}</span>
+              <span className="af-name">{STAT_LABELS[st]}{max ? ' +' : ' −'}</span>
+            </span>
+          );
+        })}
+        {minStats && (Object.entries(minStats) as [StatKey, number][]).map(([st, n]) => (
+          <span key={st} className="af-tok" style={{ color: 'var(--text-m)', fontWeight: 600 }}>
+            <StatIcon stat={st} size={SUMMARY_ICON} />
+            <span style={{ marginLeft: 1 }}>≥{n}</span>
+            <span className="af-name">{STAT_LABELS[st]} ≥{n}</span>
+          </span>
+        ))}
+      </span>
+    );
+  };
 
   const IDOL_NOTES: Record<string, string> = {
     suppressoridol: 'Cats will NOT breed in this room',
@@ -365,6 +469,75 @@ export default function RoomDesignerWorkspace({
       .map((st) => `${item[st] > 0 ? '+' : ''}${item[st]} ${STAT_LABELS[st]}`)
       .join(', ');
     return stats ? `Stat idol (${stats})` : 'Stat idol';
+  };
+
+  // Right-pane editor for the selected house room (two-pane master-detail).
+  const renderRoomDrawer = (ri: number) => {
+    const choice = roomChoice(ri);
+    const presetName = choice === 'custom' ? 'Custom' : choice === 'skip' ? 'Skip' : FILL_PRESETS[choice].label;
+    const title = (
+      <div style={{ fontWeight: 700, color: 'var(--accent)', fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        {getRoomLabel(ri)} · {presetName}
+      </div>
+    );
+    if (choice === 'skip') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {title}
+          <div className="af-skip-note">
+            <div className="af-skip-head">Skipped — nothing to configure</div>
+            <p>This room is left out of the house fill. Its current layout stays <b>exactly as it is</b>, so stats, idols and food don’t apply here.</p>
+            <p style={{ color: 'var(--text-m)' }}>Pick a preset (or <b>Custom</b>) in the dropdown to set this room up.</p>
+          </div>
+        </div>
+      );
+    }
+    const hasExtras = !!foodBox || ownedIdols.length > 0;
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {title}
+        {choice === 'custom'
+          ? renderStatChips(roomWeightsFor(ri), (stat) => cycleRoomStat(ri, stat))
+          : <div style={{ fontSize: 12, color: 'var(--text-m)' }}>{FILL_PRESETS[choice].description}</div>}
+        {hasExtras && <div style={{ height: 1, background: 'var(--border)' }} />}
+        {foodBox && (
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}
+            title="Add a food box to this room (+40 max food)"
+          >
+            <input
+              type="checkbox"
+              checked={!!roomFood[ri]}
+              onChange={(e) => setRoomFood((prev) => ({ ...prev, [ri]: e.target.checked }))}
+            />
+            Food box (+40 max food)
+          </label>
+        )}
+        {ownedIdols.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, color: 'var(--text-m)', marginBottom: 4 }}>Idols</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {ownedIdols.map((idol) => {
+                const on = roomIdolsFor(ri).has(idol.id);
+                return (
+                  <button
+                    key={idol.id}
+                    onClick={() => toggleRoomIdol(ri, idol.id)}
+                    title={idolNote(idol)}
+                    style={{ ...smallBtn, fontSize: 11, padding: '3px 9px', ...(on ? { background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent)' } : {}) }}
+                  >
+                    {idol.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {!hasExtras && choice !== 'custom' && (
+          <div style={{ fontSize: 12, color: 'var(--text-m)' }}>No idols or food boxes owned — nothing extra to add.</div>
+        )}
+      </div>
+    );
   };
 
   const containerStyle: CSSProperties = {
@@ -480,25 +653,47 @@ export default function RoomDesignerWorkspace({
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
-          flex: '1.2 1 420px',
+          flex: '1 1 360px',
           minWidth: 0,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)' }}>✨ Auto-fill</span>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              {(Object.keys(ALGORITHMS) as AlgorithmKey[]).map((key) => (
-                <label key={key} style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }} title={ALGORITHMS[key].description}>
-                  <input
-                    type="radio"
-                    name="autofill-algorithm"
-                    checked={algorithm === key}
-                    onChange={() => setAlgorithm(key)}
-                  />
-                  {ALGORITHMS[key].label}
-                </label>
-              ))}
-            </div>
+            {activeRoom !== HOUSE_VIEW && (
+              <button
+                style={{ ...smallBtn, fontWeight: 600 }}
+                onClick={() => onActiveRoomChange(HOUSE_VIEW)}
+                title="Back to the whole-house overview"
+              >
+                ⌂ House
+              </button>
+            )}
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)' }}>Auto-fill</span>
             <div style={{ flex: 1 }} />
+            {fillReport && fillProgress === null && fillSearch === null && (
+              <span style={{ fontSize: 11, color: 'var(--text-m)', flex: '0 1 auto', minWidth: 0 }} title={fillReport}>
+                {fillReport}
+              </span>
+            )}
+            <label
+              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: 'var(--text)', cursor: fillSearch === null ? 'pointer' : 'default', whiteSpace: 'nowrap' }}
+              title="Keep trying new layouts until you click “Use best result”. Best score only improves."
+            >
+              <input
+                type="checkbox"
+                checked={keepSearching}
+                disabled={fillProgress !== null || fillSearch !== null}
+                onChange={(e) => setKeepSearching(e.target.checked)}
+              />
+              Keep searching
+            </label>
+            {fillSearch !== null && (
+              <button
+                style={{ ...smallBtn, background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent)', fontWeight: 600 }}
+                onClick={onStopSearch}
+                title="Stop searching and keep the best layout found so far"
+              >
+                Use best result
+              </button>
+            )}
             <button
               style={{
                 ...smallBtn,
@@ -509,10 +704,10 @@ export default function RoomDesignerWorkspace({
                 padding: '6px 20px',
                 position: 'relative',
                 overflow: 'hidden',
-                opacity: fillReady && fillProgress === null ? 1 : 0.6,
-                cursor: fillProgress !== null ? 'progress' : fillReady ? 'pointer' : 'not-allowed',
+                opacity: fillReady && fillProgress === null && fillSearch === null ? 1 : 0.6,
+                cursor: fillProgress !== null || fillSearch !== null ? 'progress' : fillReady ? 'pointer' : 'not-allowed',
               }}
-              disabled={!fillReady || fillProgress !== null}
+              disabled={!fillReady || fillProgress !== null || fillSearch !== null}
               onClick={handleAutoFill}
               title={fillReady ? `Fill ${getRoomLabel(activeRoom)}` : 'Set at least one stat to maximize'}
             >
@@ -526,27 +721,43 @@ export default function RoomDesignerWorkspace({
                   pointerEvents: 'none',
                 }} />
               )}
-              {fillProgress !== null
-                ? `Optimizing … ${Math.round(fillProgress * 100)}%`
-                : `Fill ${getRoomLabel(activeRoom)}`}
+              {fillSearch !== null
+                ? `Searching… best ${fillSearch.bestScore} · pass ${fillSearch.passes}`
+                : fillProgress !== null
+                  ? `Optimizing … ${Math.round(fillProgress * 100)}%`
+                  : `Fill ${getRoomLabel(activeRoom)}`}
             </button>
           </div>
           {activeRoom === HOUSE_VIEW ? (
-            <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
+              {/* MASTER: compact room list */}
+              <div style={{ flex: '1 1 300px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {unlockedRooms.map((ri) => {
                   const choice = roomChoice(ri);
-                  const desc = choice === 'custom'
-                    ? 'Pick this room\u2019s own stats:'
-                    : choice === 'skip'
-                      ? 'Keeps the current layout untouched'
-                      : FILL_PRESETS[choice].description;
+                  const selected = drawerRoom === ri;
+                  const idolCount = choice === 'skip' ? 0 : roomIdolsFor(ri).size;
+                  const hasFood = choice !== 'skip' && !!roomFood[ri] && !!foodBox;
+                  const minStats = choice !== 'custom' && choice !== 'skip' ? FILL_PRESETS[choice].minStats : undefined;
                   return (
-                    <div key={ri} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <div
+                      key={ri}
+                      onClick={() => setDetailRoom(ri)}
+                      title={`Edit ${getRoomLabel(ri)}`}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '4px 6px', borderRadius: 8, cursor: 'pointer',
+                        border: `1px solid ${selected ? 'var(--accent)' : 'transparent'}`,
+                        background: selected ? 'var(--accent-bg)' : 'transparent',
+                      }}
+                    >
                       <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-h)', width: 52, flexShrink: 0 }}>{getRoomLabel(ri)}</span>
                       <select
                         value={choice}
-                        onChange={(e) => setRoomPresets((prev) => ({ ...prev, [ri]: e.target.value as FillPresetKey | 'custom' | 'skip' }))}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const v = e.target.value as FillPresetKey | 'custom' | 'skip';
+                          setRoomPresets((prev) => ({ ...prev, [ri]: v }));
+                          setDetailRoom(ri);
+                        }}
                         style={{
                           padding: '3px 6px',
                           borderRadius: 6,
@@ -564,21 +775,27 @@ export default function RoomDesignerWorkspace({
                         <option value="custom">Custom</option>
                         <option value="skip">Skip (keep as is)</option>
                       </select>
-                      <span style={{ fontSize: 11, color: 'var(--text-m)', minWidth: 0 }}>{desc}</span>
-                      {choice === 'custom' && (
-                        <div style={{ flexBasis: '100%', paddingLeft: 60 }}>
-                          {renderStatChips(roomWeightsFor(ri), (stat) => cycleRoomStat(ri, stat))}
-                        </div>
-                      )}
+                      <span style={{ flex: 1, minWidth: 0, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {choice === 'skip'
+                          ? <span style={{ fontSize: 11, color: 'var(--text-m)' }}>keeps current layout</span>
+                          : renderWeightSummary(roomEffectiveWeights(ri), minStats)}
+                        {hasFood && <span title="A food box is forced into this room" style={{ display: 'inline-flex', alignItems: 'center', fontSize: 12, fontWeight: 700, color: 'var(--text-m)', border: '1px solid currentColor', borderRadius: 4, padding: '0 4px', lineHeight: '15px' }}>FOOD</span>}
+                        {idolCount > 0 && <span title={`${idolCount} idol(s) selected`} style={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: 12, fontWeight: 700, color: 'var(--blushed-brick)', border: '1px solid currentColor', borderRadius: 4, padding: '0 4px', lineHeight: '15px' }}>{'\u2605'}{idolCount > 1 ? ` ${idolCount}` : ''}</span>}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-            </>
+              {/* DETAIL: stable editor for the selected room */}
+              <div style={{ flex: '0 1 280px', minWidth: 240, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: 12 }}>
+                {renderRoomDrawer(drawerRoom)}
+              </div>
+            </div>
           ) : (
             <>
+              {/* TARGET — preset + stats, always visible */}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 11, color: 'var(--text-m)' }}>Preset:</span>
+                <span style={{ fontWeight: 700, fontSize: 11, letterSpacing: '0.06em', color: 'var(--lavender-grey)', textTransform: 'uppercase', marginRight: 2 }}>Target</span>
                 {(Object.keys(FILL_PRESETS) as FillPresetKey[]).map((key) => (
                   <button
                     key={key}
@@ -592,15 +809,33 @@ export default function RoomDesignerWorkspace({
                     onClick={() => applyPreset(key)}
                     title={FILL_PRESETS[key].description}
                   >
-                    {FILL_PRESETS[key].label}
+                    {presetKey === key && presetModified ? `${FILL_PRESETS[key].label} *` : FILL_PRESETS[key].label}
                   </button>
                 ))}
-                <span style={{ fontSize: 11, color: 'var(--text-m)' }}>
-                  {presetKey !== 'custom' ? FILL_PRESETS[presetKey].description : 'Custom: pick stats below'}
-                </span>
+                <button
+                  style={{
+                    ...smallBtn,
+                    fontSize: 11,
+                    padding: '4px 10px',
+                    outline: 'none',
+                    ...(presetKey === 'blank' ? { background: 'var(--accent-bg)', color: 'var(--accent)', border: '1px solid var(--accent)' } : {}),
+                  }}
+                  onClick={selectBlank}
+                  title="Start from zero — no stats, no comfort floor"
+                >
+                  Blank
+                </button>
               </div>
+              <span style={{ fontSize: 11, color: 'var(--text-m)' }}>
+                {presetKey !== 'blank'
+                  ? `${FILL_PRESETS[presetKey].description}${presetModified ? ' · stats edited (rule kept)' : ''}`
+                  : 'Blank: pick stats below'}
+              </span>
               {statChips}
+              <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }} />
+              {/* EXTRAS — food + idols */}
               <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 700, fontSize: 11, letterSpacing: '0.06em', color: 'var(--lavender-grey)', textTransform: 'uppercase', marginRight: 2 }}>Extras</span>
                 <label
                   style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: foodBox ? 'var(--text)' : 'var(--text-m)', cursor: foodBox ? 'pointer' : 'not-allowed' }}
                   title={foodBox ? 'Force all owned Food Boxes into the layout (+40 max food each)' : 'No Food Box owned'}
@@ -642,46 +877,33 @@ export default function RoomDesignerWorkspace({
               </div>
             </>
           )}
-          {fillReport && fillProgress === null && (
-            <div style={{ fontSize: 11, color: 'var(--text-m)' }} title="The max assumes every positive-scoring copy fits; real rooms run out of space, so high percentages mean near-perfect.">
-              {fillReport}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 'auto', paddingTop: 4 }}>
-            <button
-              style={{ ...smallBtn, ...(checklistOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
-              onClick={() => setChecklistOpen((v) => !v)}
-              title="Tick off this room's items while placing them in the game"
-            >
-              Checklist
-            </button>
-            <button
-              style={smallBtn}
-              onClick={handleEmptyRooms}
-              title={activeRoom === HOUSE_VIEW ? 'Remove all furniture from every unlocked room' : `Remove all furniture from ${getRoomLabel(activeRoom)}`}
-            >
-              {activeRoom === HOUSE_VIEW ? 'Empty rooms' : 'Empty room'}
-            </button>
-            <button
-              style={{ ...smallBtn, ...(drawerOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
-              onClick={onToggleDrawer}
-              title={drawerOpen ? 'Hide the furniture list' : 'Show the furniture list to browse and drag items manually'}
-            >
-              {drawerOpen ? 'Hide furniture' : 'Furniture ▸'}
-            </button>
-            <button style={toggleBtn} onClick={() => setExpertView((v) => !v)}>
-              {expertView ? 'Image View' : 'Expert View'}
-            </button>
-          </div>
         </div>
-        <div style={{ flex: '1 1 340px', minWidth: 0, display: 'flex' }}>
-          <RoomStatsSummary
-            rooms={rooms}
-            activeRoom={activeRoom}
-            onActiveRoomChange={onActiveRoomChange}
-            ownership={ownership}
-            isRoomUnlocked={isRoomUnlocked}
-          />
+        <div style={{
+          flex: '1 1 360px',
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          background: 'var(--social-bg)',
+          border: '1px solid var(--border)',
+          borderRadius: 12,
+          padding: '10px 14px',
+        }}>
+          {/* header mirrors the Auto-fill card's title row for a consistent top */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 30 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)' }}>Room stats</span>
+            <div style={{ flex: 1 }} />
+            <span style={{ fontSize: 11, color: 'var(--text-m)' }}>live totals · click a room to open</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex' }}>
+            <RoomStatsSummary
+              rooms={rooms}
+              activeRoom={activeRoom}
+              onActiveRoomChange={onActiveRoomChange}
+              ownership={ownership}
+              isRoomUnlocked={isRoomUnlocked}
+            />
+          </div>
         </div>
       </div>
       <div ref={linkRootRef} style={{ flex: 1, display: 'flex', gap: 12, minHeight: 0, position: 'relative' }}>
@@ -830,7 +1052,7 @@ export default function RoomDesignerWorkspace({
           ))}
         </div>
       )}
-      {/* Bottom bar: save pic + export/import */}
+      {/* Unified action toolbar: room/view tools (left) + save & share (right) */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
@@ -838,23 +1060,51 @@ export default function RoomDesignerWorkspace({
         gap: 8,
         flexShrink: 0,
         flexWrap: 'wrap',
+        borderTop: '1px solid var(--border)',
+        paddingTop: 10,
       }}>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            style={{ ...smallBtn, ...(checklistOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
+            onClick={() => setChecklistOpen((v) => !v)}
+            title="Tick off this room's items while placing them in the game"
+          >
+            Checklist
+          </button>
+          <button style={toggleBtn} onClick={() => setExpertView((v) => !v)}>
+            {expertView ? 'Image View' : 'Expert View'}
+          </button>
+          <button
+            style={{ ...smallBtn, ...(drawerOpen ? { background: 'var(--accent-bg)', color: 'var(--accent)' } : {}) }}
+            onClick={onToggleDrawer}
+            title={drawerOpen ? 'Hide the furniture list' : 'Show the furniture list to browse and drag items manually'}
+          >
+            {drawerOpen ? 'Hide furniture' : 'Furniture ▸'}
+          </button>
+          <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 2px' }} />
+          <button
+            style={smallBtn}
+            onClick={handleEmptyRooms}
+            title={activeRoom === HOUSE_VIEW ? 'Remove all furniture from every unlocked room' : `Remove all furniture from ${getRoomLabel(activeRoom)}`}
+          >
+            {activeRoom === HOUSE_VIEW ? 'Empty rooms' : 'Empty room'}
+          </button>
+        </div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
           {activeRoom !== HOUSE_VIEW && (
             <button style={smallBtn} onClick={() => captureRoom(rooms, activeRoom)} title={`Save image of ${getRoomLabel(activeRoom)}`}>
-              Save image of {getRoomLabel(activeRoom)}
+              Save room image
             </button>
           )}
           <button style={smallBtn} onClick={() => captureHouse(rooms)} title="Save image of all rooms">
-            Save image of a house
+            Save house image
           </button>
-        </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 2px' }} />
           <button style={smallBtn} onClick={handleExport} title="Export all room layouts as JSON">
-            Export to file
+            Export
           </button>
           <button style={smallBtn} onClick={() => fileInputRef.current?.click()} title="Import room layouts from JSON">
-            Import from file
+            Import
           </button>
         </div>
       </div>

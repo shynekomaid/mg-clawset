@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Auto-fill panel — prototypes</title>
+<style>
+  :root{
+    --graphite:#2d2d2a; --charcoal:#4c4c47; --lavender-grey:#848fa5;
+    --blushed-brick:#c14953; --sand-dune:#e5dcc5;
+    --text:#9ca3af; --text-h:#f3f4f6; --text-m:#6b7280;
+    --bg:#1a1a1f; --border:#2e303a; --code-bg:#1f2028;
+    --accent:#e06a73; --accent-bg:rgba(224,106,115,.15); --accent-border:rgba(224,106,115,.5);
+    --social-bg:rgba(47,48,58,.5);
+    --c-appeal:rgb(193,73,83); --c-comfort:rgb(70,130,180); --c-stim:rgb(180,140,60);
+    --c-health:rgb(80,160,80); --c-mut:rgb(140,80,180);
+    --font:'Rubik',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#0f0f13;color:var(--text);font:14px/1.5 var(--font);padding:24px;display:flex;flex-direction:column;gap:18px;align-items:center}
+  h1{color:var(--text-h);font-size:20px;margin:0}
+  .lead{max-width:920px;text-align:center;color:var(--text-m);font-size:13px;margin:0 0 4px}
+  .controls{display:flex;gap:24px;flex-wrap:wrap;justify-content:center;align-items:center;position:sticky;top:0;background:#0f0f13;padding:10px 0;z-index:50;width:100%;border-bottom:1px solid var(--border)}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .seg button{background:transparent;color:var(--text);border:0;padding:8px 16px;font:600 13px var(--font);cursor:pointer}
+  .seg button.on{background:var(--accent);color:#fff}
+  .stage{width:100%;max-width:960px;display:flex;flex-direction:column;gap:10px}
+  .proto-title{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .proto-title h2{color:var(--text-h);font-size:16px;margin:0}
+  .principles{font-size:12px;color:var(--text-m)}
+  .principles b{color:var(--lavender-grey);font-weight:600}
+
+  /* ---- shared app-like panel shell ---- */
+  .panel{background:var(--code-bg);border:1px solid var(--border);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:12px}
+  .card{background:var(--social-bg);border:1px solid var(--border);border-radius:12px;padding:10px 14px;display:flex;flex-direction:column;gap:8px}
+  .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .spacer{flex:1}
+  .muted{color:var(--text-m);font-size:12px}
+  .label-h{color:var(--text-h);font-weight:700}
+  .hr{height:1px;background:var(--border);margin:2px 0}
+
+  .btn{background:rgba(47,48,58,.6);color:var(--text-h);border:1px solid var(--border);border-radius:8px;padding:5px 12px;font:500 12px var(--font);cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--lavender-grey)}
+  .btn.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+  .btn.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:7px 22px;font-size:13px}
+  .btn.ghost{background:transparent}
+  .btn.sm{padding:3px 9px;font-size:11px}
+  .sel{background:var(--bg);color:var(--text-h);border:1px solid var(--border);border-radius:7px;padding:4px 8px;font:12px var(--font);cursor:pointer}
+
+  /* stat chip (editable) */
+  .chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);background:var(--bg);color:var(--text-m);border-radius:14px;padding:3px 10px;font:600 12px var(--font);cursor:pointer;user-select:none}
+  .chip .dot{width:15px;height:15px;border-radius:50%;display:inline-grid;place-items:center;font:700 9px var(--font);color:#fff;background:var(--lavender-grey)}
+  .chip.max{color:#fff}
+  .chip.avoid{color:#fff;background:var(--charcoal);border-color:var(--charcoal)}
+  /* read-only summary token */
+  /* compact inline footprint never changes -> siblings never move on hover */
+  .tok{position:relative;display:inline-flex;align-items:center;gap:2px;font:700 13px var(--font)}
+  .tok .dot{width:15px;height:15px;border-radius:50%;display:inline-grid;place-items:center;font:700 9px var(--font);color:#fff;flex:none}
+  .tok .sign{margin-left:2px}
+  /* full label floats over neighbours as an overlay; pointer-events:none lets
+     the cursor pass through to the icon underneath, so the next icon stays hittable */
+  .tok .name{position:absolute;left:100%;top:50%;margin-left:5px;white-space:nowrap;opacity:0;pointer-events:none;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:1px 8px;font-weight:600;color:inherit;transform:translate(-6px,-50%);transition:opacity .16s ease,transform .2s ease;z-index:8;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  .tok:hover{z-index:8}
+  .tok:hover .name{opacity:1;transform:translate(0,-50%)}
+  .tok.floor{color:var(--text-m);font-weight:600}
+
+  /* text pills (no emoji) */
+  .pill{display:inline-flex;align-items:center;gap:3px;border:1px solid currentColor;border-radius:5px;padding:0 5px;font:700 11px var(--font);line-height:17px}
+  .pill.food{color:var(--lavender-grey)}
+  .pill.idol{color:var(--blushed-brick)}
+
+  .score{font-size:11px;color:var(--text-m)}
+  .check{display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap}
+  .footer-tools{display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:10px;margin-top:2px}
+
+  /* house room list */
+  .hroom{border:1px solid transparent;border-radius:8px}
+  .hroom.open{border-color:var(--accent);background:var(--accent-bg)}
+  .hroom .hhead{display:flex;align-items:center;gap:10px;padding:4px 6px}
+  .hroom .rname{width:56px;color:var(--text-h);font-weight:600;font-size:12px;flex:none}
+  .hroom .hsum{flex:1;min-width:0;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .hroom .hdetail{padding:2px 10px 10px 62px;display:flex;flex-direction:column;gap:8px}
+
+  /* prototype B two-pane */
+  .twopane{display:grid;grid-template-columns:1fr 280px;gap:12px}
+  .drawer{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:10px}
+  .section .stitle{font:700 11px var(--font);letter-spacing:.06em;color:var(--lavender-grey);text-transform:uppercase;margin-bottom:6px}
+
+  /* prototype C cards + popover */
+  .cgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+  .ccard{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;gap:6px;cursor:pointer}
+  .ccard:hover{border-color:var(--lavender-grey)}
+  .ccard.on{border-color:var(--accent)}
+  .pop{position:relative}
+  .popbody{position:absolute;top:calc(100% + 6px);left:0;z-index:30;background:var(--bg);border:1px solid var(--accent-border);border-radius:10px;padding:10px;box-shadow:0 8px 24px rgba(0,0,0,.5);min-width:240px;display:none;flex-direction:column;gap:8px}
+  .popbody.show{display:flex}
+  .hide{display:none!important}
+  .note{font-size:11px;color:var(--text-m)}
+  .skip-note{border:1px dashed var(--border);border-left:3px solid var(--lavender-grey);border-radius:8px;background:var(--social-bg);padding:10px 12px}
+  .skip-note .skip-head{color:var(--text-h);font-weight:600;font-size:13px;margin-bottom:6px}
+  .skip-note p{margin:0 0 6px;font-size:12px;line-height:1.45}
+  .skip-note p:last-child{margin-bottom:0}
+</style>
+</head>
+<body>
+  <h1>Auto-fill panel — visual prototypes</h1>
+  <p class="lead">Three UX directions for the same requirement set. Toggle the mode to compare single-room vs whole-house. Chips, presets and disclosures are clickable. Dark theme + brick accent to match the live app.</p>
+
+  <div class="controls">
+    <div class="seg" id="protoSeg">
+      <button data-p="A" class="on">A · Disclosure</button>
+      <button data-p="B">B · Sectioned form</button>
+      <button data-p="C">C · Command bar</button>
+    </div>
+    <div class="seg" id="modeSeg">
+      <button data-m="single" class="on">Single room</button>
+      <button data-m="house">Whole house</button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage"></div>
+
+<script>
+const STATS=[
+  {k:'appeal',ab:'A',name:'Appeal',c:'var(--c-appeal)'},
+  {k:'comfort',ab:'C',name:'Comfort',c:'var(--c-comfort)'},
+  {k:'stim',ab:'S',name:'Stimulation',c:'var(--c-stim)'},
+  {k:'health',ab:'H',name:'Health',c:'var(--c-health)'},
+  {k:'mut',ab:'M',name:'Mutation',c:'var(--c-mut)'},
+];
+// weight: 0 off, 1 max, -1 avoid
+function chip(w,active){const cls=active===1?'chip max':active===-1?'chip avoid':'chip';
+  const bg=active===1?w.c:active===-1?'var(--charcoal)':'var(--bg)';
+  const bd=active===1?w.c:active===-1?'var(--charcoal)':'var(--border)';
+  return `<button class="${cls}" style="background:${bg};border-color:${bd}" data-stat="${w.k}" title="${w.name} — click to cycle: maximise → avoid → off">
+    <span class="dot" style="background:${active===0?'var(--lavender-grey)':'rgba(255,255,255,.25)'}">${w.ab}</span>${w.name}${active===1?' +':active===-1?' −':''}</button>`;}
+function statRow(weights){return `<div class="row" data-statrow><span class="muted">Stats:</span>${STATS.map(s=>chip(s,weights[s.k]||0)).join('')}</div>`;}
+function summary(weights,floor){
+  const toks=STATS.filter(s=>weights[s.k]).map(s=>{const max=weights[s.k]===1;
+    return `<span class="tok" style="color:${max?s.c:'var(--lavender-grey)'}" title="${max?'maximise':'avoid'} ${s.name}"><span class="dot" style="background:${max?s.c:'var(--lavender-grey)'}">${s.ab}</span><span class="name">${s.name}</span><span class="sign">${max?'+':'−'}</span></span>`;}).join('');
+  const fl=floor?`<span class="tok floor" title="keep ${floor.name} at least ${floor.n}"><span class="dot" style="background:var(--c-comfort)">C</span><span class="name">${floor.name}</span><span class="sign">≥${floor.n}</span></span>`:'';
+  return toks+fl || '<span class="muted">set stats ▾</span>';}
+const foodPill='<span class="pill food">FOOD</span>';
+const idolPill=n=>`<span class="pill idol">★${n>1?' '+n:''}</span>`;
+function presetBtns(active,modified){
+  const list=[['breeding','Breeding'],['storage','Storage'],['mutation','Mutation']];
+  return list.map(([k,l])=>`<button class="btn sm ${active===k?'on':''}" data-preset="${k}">${l}${active===k&&modified?' *':''}</button>`).join('')
+    +`<button class="btn sm ${active==='blank'?'on':''}" data-preset="blank">Blank</button>`;}
+const idolChips=sel=>['Chastity','Fight','Greed'].map((n,i)=>`<button class="btn sm ${sel.includes(i)?'on':''}" data-idol="${i}" title="${n} idol">${n}</button>`).join('');
+const keepSearch='<label class="check"><input type="checkbox"> Keep searching</label>';
+const scoreLine='<span class="score">Score 318 · 92% of max · 40/44 cells</span>';
+const footer='<div class="footer-tools"><button class="btn sm">Checklist</button><button class="btn sm">Empty room</button><button class="btn sm">Furniture ▸</button><button class="btn sm">Expert View</button></div>';
+
+// preset meta
+const PMETA={breeding:{floor:{name:'Comfort',n:4},desc:'Maximise stimulation, keep comfort ≥ 4 (4 cats)'},
+  storage:{floor:null,desc:'Maximise health + comfort; auto-adds Idol of Chastity'},
+  mutation:{floor:null,desc:'Maximise mutation + comfort, lowest stimulation'},
+  blank:{floor:null,desc:'Start from zero — open Tune to pick stats'}};
+const PWEIGHTS={breeding:{stim:1},storage:{health:1,comfort:1},mutation:{mut:1,comfort:1,stim:-1},blank:{}};
+const HOUSE=[['Attic','breeding',[]],['Room 1','storage',[0]],['Room 2','mutation',[]],['Room 3','custom',[]],['Room 4','skip',[]]];
+
+/* ================= PROTOTYPE A — Disclosure ================= */
+function A_single(){return `<div class="panel">
+  <div class="card">
+    <div class="row"><button class="btn">⌂ House</button><span class="label-h">✨ Auto-fill</span><span class="spacer"></span>${scoreLine}${keepSearch}<button class="btn primary">Fill Room 2</button></div>
+    <div class="row"><span class="muted">Preset:</span>${presetBtns('breeding',false)}<span class="spacer"></span><button class="btn sm" data-tune>Tune ▾</button></div>
+    <div class="muted" data-desc>${PMETA.breeding.desc}</div>
+    <div data-tunebody class="hide" style="display:flex;flex-direction:column;gap:8px">
+      ${statRow(PWEIGHTS.breeding)}
+      <div class="row" style="gap:16px"><label class="check"><input type="checkbox"> Include food storage</label><span class="muted">Idols:</span>${idolChips([])}</div>
+    </div>
+  </div>
+  ${footer}
+  <div class="note">Principles: <b>progressive disclosure</b> (Tune hidden by default), <b>primary-action prominence</b>, <b>recognition over recall</b> (preset description always shown).</div>
+</div>`;}
+function A_house(){return `<div class="panel">
+  <div class="card">
+    <div class="row"><span class="label-h">✨ Auto-fill · House</span><span class="spacer"></span><span class="score">Score 902 · 88% · best of 14 passes</span>${keepSearch}<button class="btn primary">Fill House</button></div>
+    <div class="hr"></div>
+    <div data-hlist>${HOUSE.map((r,i)=>houseRowA(r,i)).join('')}</div>
+  </div>
+  ${footer}
+  <div class="note">Principles: <b>master-detail</b> (one line per room, edit on demand), <b>vertical economy</b>, <b>recognition</b> (focus + FOOD/★ markers visible while collapsed).</div>
+</div>`;}
+function houseRowA([name,preset,idols],i){
+  const w=preset==='custom'?{}:preset==='skip'?{}:PWEIGHTS[preset];
+  const floor=preset!=='custom'&&preset!=='skip'?PMETA[preset].floor:null;
+  const sum=preset==='skip'?'<span class="muted">keeps current layout</span>':summary(w,floor);
+  const markers=(idols.length?idolPill(idols.length):'');
+  const open=i===1;
+  return `<div class="hroom ${open?'open':''}" data-hroom>
+    <div class="hhead">
+      <span class="rname">${name}</span>
+      <select class="sel"><option ${preset==='breeding'?'selected':''}>Breeding</option><option ${preset==='storage'?'selected':''}>Storage</option><option ${preset==='mutation'?'selected':''}>Mutation</option><option ${preset==='custom'?'selected':''}>Custom</option><option ${preset==='skip'?'selected':''}>Skip</option></select>
+      <span class="hsum">${sum} ${markers}</span>
+      ${preset!=='skip'?`<button class="btn sm ${open?'on':''}" data-edit>${open?'Done':'Edit ▾'}</button>`:''}
+    </div>
+    ${open?`<div class="hdetail">${preset==='custom'?statRow({}):''}<div class="row" style="gap:14px"><label class="check"><input type="checkbox" ${i===1?'checked':''}> Food box</label><span class="muted">Idols:</span>${idolChips(idols)}</div></div>`:''}
+  </div>`;}
+
+/* ================= PROTOTYPE B — Sectioned form ================= */
+function B_single(){return `<div class="panel">
+  <div class="card" style="gap:12px">
+    <div class="section"><div class="stitle">Target</div><div class="row"><span class="muted">Preset:</span>${presetBtns('breeding',false)}</div><div class="muted" style="margin-top:6px">${PMETA.breeding.desc}</div><div style="margin-top:8px">${statRow(PWEIGHTS.breeding)}</div></div>
+    <div class="hr"></div>
+    <div class="section"><div class="stitle">Extras</div><div class="row" style="gap:16px"><label class="check"><input type="checkbox"> Food storage</label><span class="muted">Idols:</span>${idolChips([])}</div></div>
+    <div class="hr"></div>
+    <div class="section"><div class="stitle">Search</div><div class="row">${keepSearch}<span class="muted">always uses the maximise search</span></div></div>
+    <div class="hr"></div>
+    <div class="row"><button class="btn primary" style="padding:9px 26px">Fill Room 2</button><span class="spacer"></span>${scoreLine}</div>
+  </div>
+  ${footer}
+  <div class="note">Principles: <b>Gestalt grouping</b> (titled sections), <b>labels + helper text</b>, <b>nothing hidden</b>. Cost: tallest layout.</div>
+</div>`;}
+function B_house(){return `<div class="panel">
+  <div class="card">
+    <div class="row"><span class="label-h">✨ Auto-fill · House</span><span class="spacer"></span><span class="score">Score 902 · 88% · best of 14</span>${keepSearch}<button class="btn primary">Fill House</button></div>
+    <div class="hr"></div>
+    <div class="twopane">
+      <div data-blist style="display:flex;flex-direction:column;gap:4px">${HOUSE.map((r,i)=>houseRowB(r,i)).join('')}</div>
+      <div class="drawer" data-bdrawer>${drawerB(HOUSE[1],1)}</div>
+    </div>
+  </div>
+  ${footer}
+  <div class="note">Principles: <b>two-pane master-detail</b> — list never reflows, one stable editor on the right. Best when editing several rooms in a row.</div>
+</div>`;}
+function houseRowB([name,preset,idols],i){
+  const w=preset==='custom'?{}:preset==='skip'?{}:PWEIGHTS[preset];
+  const floor=preset!=='custom'&&preset!=='skip'?PMETA[preset].floor:null;
+  const sum=preset==='skip'?'<span class="muted">keeps layout</span>':summary(w,floor);
+  return `<div class="hroom ${i===1?'open':''}" data-brow data-i="${i}" style="cursor:pointer">
+    <div class="hhead"><span class="rname">${name}</span>
+      <select class="sel" onclick="event.stopPropagation()"><option ${preset==='breeding'?'selected':''}>Breeding</option><option ${preset==='storage'?'selected':''}>Storage</option><option ${preset==='mutation'?'selected':''}>Mutation</option><option ${preset==='custom'?'selected':''}>Custom</option><option ${preset==='skip'?'selected':''}>Skip</option></select>
+      <span class="hsum">${sum} ${idols.length?idolPill(idols.length):''} ${i===1?foodPill:''}</span>
+    </div></div>`;}
+function drawerB([name,preset,idols],i){
+  const title=`<div class="stitle" style="color:var(--accent)">${name} · ${preset[0].toUpperCase()+preset.slice(1)}</div>`;
+  if(preset==='skip'){
+    return title+`<div class="skip-note">
+      <div class="skip-head">Skipped — nothing to configure</div>
+      <p>This room is left out of the house fill. Its current layout stays <b>exactly as it is</b>, so stats, idols and food don't apply here.</p>
+      <p class="muted">Pick a preset (or <b>Custom</b>) in the dropdown to set this room up.</p>
+    </div>`;}
+  return title+`
+    ${preset==='custom'?statRow({}):`<div class="muted">${PMETA[preset]?PMETA[preset].desc:''}</div>`}
+    <div class="hr"></div>
+    <label class="check"><input type="checkbox" ${i===1?'checked':''}> Food box (+40 max food)</label>
+    <div><div class="muted" style="margin-bottom:4px">Idols</div><div class="row">${idolChips(idols)}</div></div>`;}
+
+/* ================= PROTOTYPE C — Command bar + popovers ================= */
+function C_single(){return `<div class="panel">
+  <div class="card">
+    <div class="row">
+      <span class="label-h">✨ Auto-fill</span>
+      <div class="pop"><button class="btn" data-pop="p1">Preset: Breeding ▾</button><div class="popbody" data-popbody="p1"><div class="muted">${PMETA.breeding.desc}</div><div class="row">${presetBtns('breeding',false)}</div></div></div>
+      <div class="pop"><button class="btn" data-pop="p2">Stats ▾</button><div class="popbody" data-popbody="p2">${statRow(PWEIGHTS.breeding)}</div></div>
+      <div class="pop"><button class="btn" data-pop="p3">Extras ▾</button><div class="popbody" data-popbody="p3"><label class="check"><input type="checkbox"> Food storage</label><div class="muted">Idols</div><div class="row">${idolChips([])}</div></div></div>
+      <span class="spacer"></span>${keepSearch}<button class="btn primary">Fill Room 2</button>
+    </div>
+    <div class="row">${scoreLine}</div>
+  </div>
+  ${footer}
+  <div class="note">Principles: <b>minimal footprint</b> (one bar), <b>popover editing</b>, scales identically to house mode. Cost: stats are one click away.</div>
+</div>`;}
+function C_house(){return `<div class="panel">
+  <div class="card">
+    <div class="row"><span class="label-h">✨ Auto-fill · House</span><span class="spacer"></span><span class="score">Score 902 · best of 14</span>${keepSearch}<button class="btn primary">Fill House</button></div>
+    <div class="hr"></div>
+    <div class="cgrid">${HOUSE.map((r,i)=>cardC(r,i)).join('')}</div>
+  </div>
+  ${footer}
+  <div class="note">Principles: <b>scannable cards</b> (each room a tile), <b>direct manipulation</b> (click a card to edit in a popover). Compact, grid scales to any room count.</div>
+</div>`;}
+function cardC([name,preset,idols],i){
+  const w=preset==='custom'?{}:preset==='skip'?{}:PWEIGHTS[preset];
+  const floor=preset!=='custom'&&preset!=='skip'?PMETA[preset].floor:null;
+  const sum=preset==='skip'?'<span class="muted">keeps layout</span>':summary(w,floor);
+  return `<div class="pop"><div class="ccard" data-pop="c${i}">
+      <div class="row" style="justify-content:space-between"><span class="label-h" style="font-size:13px">${name}</span><span class="muted">${preset==='skip'?'Skip':preset[0].toUpperCase()+preset.slice(1)}</span></div>
+      <div class="row">${sum} ${idols.length?idolPill(idols.length):''} ${i===1?foodPill:''}</div>
+    </div>
+    <div class="popbody" data-popbody="c${i}">
+      <select class="sel"><option ${preset==='breeding'?'selected':''}>Breeding</option><option ${preset==='storage'?'selected':''}>Storage</option><option ${preset==='mutation'?'selected':''}>Mutation</option><option ${preset==='custom'?'selected':''}>Custom</option><option ${preset==='skip'?'selected':''}>Skip</option></select>
+      ${preset==='custom'?statRow({}):''}
+      <label class="check"><input type="checkbox" ${i===1?'checked':''}> Food box</label>
+      <div class="muted">Idols</div><div class="row">${idolChips(idols)}</div>
+    </div></div>`;}
+
+const RENDER={A:{single:A_single,house:A_house},B:{single:B_single,house:B_house},C:{single:C_single,house:C_house}};
+let proto='A',mode='single';
+function draw(){document.getElementById('stage').innerHTML=
+  `<div class="proto-title"><h2>Prototype ${proto}</h2><span class="principles">${{A:'Disclosure panel',B:'Sectioned form',C:'Command bar + popovers'}[proto]} · ${mode==='single'?'single room':'whole house'}</span></div>`
+  +RENDER[proto][mode]();
+  wire();}
+function wire(){
+  // stat chip cycle
+  document.querySelectorAll('[data-stat]').forEach(b=>b.onclick=()=>{
+    const cur=b.classList.contains('max')?1:b.classList.contains('avoid')?-1:0;
+    const next=cur===0?1:cur===1?-1:0; const s=STATS.find(x=>x.k===b.dataset.stat);
+    b.className=next===1?'chip max':next===-1?'chip avoid':'chip';
+    b.style.background=next===1?s.c:next===-1?'var(--charcoal)':'var(--bg)';
+    b.style.borderColor=next===1?s.c:next===-1?'var(--charcoal)':'var(--border)';
+    b.querySelector('.dot').style.background=next===0?'var(--lavender-grey)':'rgba(255,255,255,.25)';
+    b.innerHTML=`<span class="dot" style="background:${next===0?'var(--lavender-grey)':'rgba(255,255,255,.25)'}">${s.ab}</span>${s.name}${next===1?' +':next===-1?' −':''}`;
+  });
+  // preset select (single)
+  document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.preset; document.querySelectorAll('[data-preset]').forEach(x=>x.classList.toggle('on',x===b));
+    const d=document.querySelector('[data-desc]'); if(d)d.textContent=PMETA[k].desc;
+    const sr=document.querySelector('[data-statrow]'); if(sr){const tmp=document.createElement('div');tmp.innerHTML=statRow(PWEIGHTS[k]);sr.replaceWith(tmp.firstElementChild);wire();}
+  });
+  // idol toggles
+  document.querySelectorAll('[data-idol]').forEach(b=>b.onclick=()=>b.classList.toggle('on'));
+  // Tune disclosure (A single)
+  const tune=document.querySelector('[data-tune]'); if(tune)tune.onclick=()=>{const body=document.querySelector('[data-tunebody]');const open=body.classList.toggle('hide')===false;tune.textContent=open?'Tune ▴':'Tune ▾';tune.classList.toggle('on',open);wire();};
+  // Edit disclosure (A house)
+  document.querySelectorAll('[data-hroom] [data-edit]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-hroom]').forEach(r=>r.classList.remove('open'));b.closest('[data-hroom]').classList.add('open');draw();}); // simple redraw keeps demo light
+  // B rows -> drawer
+  document.querySelectorAll('[data-brow]').forEach(r=>r.onclick=()=>{
+    document.querySelectorAll('[data-brow]').forEach(x=>x.classList.remove('open'));r.classList.add('open');
+    const i=+r.dataset.i;document.querySelector('[data-bdrawer]').innerHTML=drawerB(HOUSE[i],i);wire();});
+  // C popovers
+  document.querySelectorAll('[data-pop]').forEach(b=>b.onclick=e=>{e.stopPropagation();const id=b.dataset.pop;const body=document.querySelector(`[data-popbody="${id}"]`);const show=!body.classList.contains('show');document.querySelectorAll('.popbody').forEach(x=>x.classList.remove('show'));if(show)body.classList.add('show');});
+}
+document.addEventListener('click',()=>document.querySelectorAll('.popbody').forEach(x=>x.classList.remove('show')));
+document.getElementById('protoSeg').onclick=e=>{if(!e.target.dataset.p)return;proto=e.target.dataset.p;[...e.currentTarget.children].forEach(c=>c.classList.toggle('on',c===e.target));draw();};
+document.getElementById('modeSeg').onclick=e=>{if(!e.target.dataset.m)return;mode=e.target.dataset.m;[...e.currentTarget.children].forEach(c=>c.classList.toggle('on',c===e.target));draw();};
+draw();
+</script>
+</body>
+</html>

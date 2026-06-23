@@ -164,7 +164,7 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect, labelNumbers, hoverIt
             color: 'var(--text-m)',
             textAlign: 'center',
           }}>
-            🔒 not yet unlocked in game
+Locked — not yet unlocked in game
           </div>
         )}
       </div>
