@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Clawset - Mewgenics Furniture Manager</title>
+  <meta name="description" content="Browse, filter, and manage all 1250+ furniture items in Mewgenics." />
+  <script>
+    // GitHub Pages SPA redirect
+    var pathSegmentsToKeep = 1;
+    var l = window.location;
+    l.replace(
+      l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+      l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?/' +
+      l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/').replace(/&/g, '~and~') +
+      (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+      l.hash
+    );
+  </script>
+</head>
+<body>
+  <h1>Clawset - Mewgenics Furniture Manager</h1>
+  <p>Redirecting...</p>
+</body>
+</html>

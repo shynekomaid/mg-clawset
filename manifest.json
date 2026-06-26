@@ -1,0 +1,18 @@
+{
+  "name": "Clawset - Mewgenics Furniture Manager",
+  "short_name": "Clawset",
+  "description": "Browse, filter, and manage all 1250+ furniture items in Mewgenics. Track your collection and design rooms.",
+  "start_url": "/mg-clawset/",
+  "scope": "/mg-clawset/",
+  "display": "standalone",
+  "background_color": "#1a1b26",
+  "theme_color": "#1a1b26",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

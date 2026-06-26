@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   ffdec:objectType="frame"
+   height="86.5"
+   width="14.5"
+   version="1.1"
+   id="svg10"
+   sodipodi:docname="2.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:ffdec="https://www.free-decompiler.com/flash">
+  <sodipodi:namedview
+     id="namedview10"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     fit-margin-top="5"
+     fit-margin-left="5"
+     fit-margin-right="5"
+     fit-margin-bottom="5" />
+  <g
+     transform="translate(7.25,43.2)"
+     id="g4">
+    <use
+       ffdec:characterId="2094"
+       height="86.550003"
+       transform="translate(-7.25,-43.25)"
+       width="14.5"
+       xlink:href="#shape0"
+       id="use1" />
+    <use
+       ffdec:characterId="1691"
+       height="8"
+       transform="matrix(0.7146,0,0,0.7146,-3.6088,-4.9583)"
+       width="10.8"
+       xlink:href="#sprite0"
+       id="use2" />
+    <use
+       ffdec:characterId="1977"
+       height="2.3"
+       transform="matrix(0,0.6471,-0.6471,0,1.0441,4.1088)"
+       width="2.55"
+       xlink:href="#sprite1"
+       id="use3" />
+    <use
+       ffdec:characterId="1979"
+       height="2.3"
+       transform="matrix(0,0.6471,-0.6471,0,-2.1059,4.1088)"
+       width="2.55"
+       xlink:href="#sprite2"
+       id="use4" />
+  </g>
+  <defs
+     id="defs10">
+    <g
+       id="shape0"
+       transform="translate(7.25,43.25)">
+      <path
+         d="m 4.35,-38.9 -0.8,0.2 h -7.2 l -0.55,-0.15 0.05,-1.7 7.3,-0.1 L 4.3,-41 v 0.55 l 0.05,1.55 m -4.7,63.65 V 16.2 h 0.25 l 0.3,0.05 -0.1,0.4 0.3,-0.4 H 0.65 0.9 l 0.1,6.8 v 0.45 0.7 0.55 L 0.55,24.8 h -0.8 l -0.1,-0.05"
+         fill="#8e8e8e"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path4" />
+      <path
+         d="m 7.25,-41.45 v 54.2 L 7.15,13 Q 7.1,13.75 6.6,13.95 l -0.8,0.15 -1.15,1.1 -1.5,0.75 q 0.3,0.9 0.25,2.45 L 2.95,24.2 H 3 l 0.05,0.95 v 1.8 5.8 1.05 0.8 L 2.9,36.65 4.6,36.9 Q 4.8,36.65 5.1,36.65 6.35,36.6 6.35,41.1 L 6.3,41.8 V 42 q 0,0.95 -0.95,1.1 L -0.3,43.3 -5.45,43 h -0.2 q -0.95,0 -1.2,-1.45 V 40 q 0,-3.05 1.2,-3.05 0.25,0 0.45,0.15 l 2.45,-0.45 V 35.45 24.2 H -2.7 V 15.9 Q -4,15.6 -4.9,15.1 l -0.8,-0.55 h -0.2 q -1,0 -1.25,-1.25 l -0.1,-0.95 q 0,-0.65 0.35,-0.95 L -7.05,9.8 -7.1,5.25 -7,4.35 v -42.1 -3.1 l 0.05,-0.3 -0.15,-0.65 0.3,-0.8 q 0.25,-0.4 0.85,-0.45 l 0.3,-0.15 0.8,0.15 8,0.1 1.6,0.2 q 0.45,-0.5 1.25,0 l 1.25,1.3 m -11.45,2.6 -0.05,1.35 V 1.95 L 2.6,1.9 l 2,0.05 v -14.5 l -0.05,-0.2 V -27.1 q -0.2,-5.3 0,-8.05 L 4.35,-38.9 4.3,-40.45 V -41 l -1.15,0.35 -7.3,0.1 -0.05,1.7 M 4.6,3.4 -4.25,3.35 -4.2,5.3 l -0.05,4.75 -0.1,1.4 h 3.1 5.85 V 11.35 7.7 3.4 M 1,24.75 V 24.2 23.5 23.05 L 0.9,16.25 H 0.65 0.4 l -0.3,0.4 0.1,-0.4 -0.3,-0.05 h -0.25 v 8.55 0.3 l 0.1,0.15 v 2.85 7.4 l 0.1,1.1 H -0.1 0.4 0.55 L 1,36.35 V 24.75 M 3.9,39.2 -4.45,39.1 v 0.9 0.95 l 2.95,-0.2 Q 1.9,40.6 3.8,40.8 l 0.1,-1.6"
+         fill="#6b6b6b"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path5" />
+      <path
+         d="m -4.2,-38.85 0.55,0.15 h 7.2 l 0.8,-0.2 0.2,3.75 q -0.2,2.75 0,8.05 v 14.35 l 0.05,0.2 V 1.95 L 2.6,1.9 -4.25,1.95 V -37.5 l 0.05,-1.35 M 4.6,3.4 v 4.3 3.65 0.1 h -5.85 -3.1 l 0.1,-1.4 L -4.2,5.3 -4.25,3.35 4.6,3.4"
+         fill="#797979"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path6" />
+      <path
+         d="m 1,24.75 v 11.6 l -0.45,0.2 H 0.4 -0.1 -0.15 l -0.1,-1.1 v -7.4 -2.85 l -0.1,-0.15 v -0.3 l 0.1,0.05 h 0.8 L 1,24.75 M 3.9,39.2 3.8,40.8 Q 1.9,40.6 -1.5,40.75 l -2.95,0.2 V 40 39.1 l 8.35,0.1"
+         fill="#b8b8b8"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path7" />
+    </g>
+    <g
+       id="sprite0"
+       transform="translate(5.4,4)">
+      <use
+         ffdec:characterId="43"
+         height="8"
+         transform="translate(-5.4,-4)"
+         width="10.8"
+         xlink:href="#shape1"
+         id="use7" />
+    </g>
+    <g
+       id="shape1"
+       transform="translate(5.4,4)">
+      <path
+         d="m 2.9,-0.35 q 0,-1.25 1.25,-1.25 1.25,0 1.25,1.2 0,1.3 -1.25,1.3 Q 3.6,0.9 3.25,0.5 2.9,0.15 2.9,-0.35 m 0.35,-2.3 q 0,0.55 -0.35,0.9 -0.4,0.45 -1,0.45 -1.35,0 -1.35,-1.4 0,-1.3 1.35,-1.3 1.35,0 1.35,1.35 m -3.1,1.9 h 0.2 q 2.6,0.1 2.6,2.8 l -0.3,1 Q 2.05,4 0.45,4 H 0.35 0.15 0.1 -0.45 q -1.6,0 -2.2,-0.95 l -0.3,-1 q 0,-2.8 2.8,-2.8 h 0.3 M -1.55,-4 q 1.35,0 1.35,1.35 0,0.55 -0.4,0.9 -0.4,0.45 -0.95,0.45 -1.4,0 -1.4,-1.4 0,-1.3 1.4,-1.3 m -2.6,2.4 q 1.25,0 1.25,1.25 0,0.5 -0.35,0.85 -0.35,0.4 -0.9,0.4 -1.25,0 -1.25,-1.3 0,-1.2 1.25,-1.2"
+         fill="#6b6b6b"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path8" />
+    </g>
+    <g
+       id="sprite1"
+       transform="translate(1.3,1.15)">
+      <use
+         ffdec:characterId="695"
+         height="2.3"
+         transform="translate(-1.3,-1.15)"
+         width="2.55"
+         xlink:href="#shape2"
+         id="use8" />
+    </g>
+    <g
+       id="shape2"
+       transform="translate(1.3,1.15)">
+      <path
+         d="m 1.25,-0.3 v 0.25 q 0,1.2 -1.3,1.2 L -0.45,1.1 Q -1,1 -1.2,0.55 l -0.05,-0.5 -0.05,-0.1 0.05,-0.25 0.2,-0.55 q 0.3,-0.4 1.05,-0.3 l 0.95,0.35 0.3,0.5"
+         fill="#ffffff"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path9" />
+    </g>
+    <g
+       id="sprite2"
+       transform="translate(1.3,1.15)">
+      <use
+         ffdec:characterId="696"
+         height="2.3"
+         transform="translate(-1.3,-1.15)"
+         width="2.55"
+         xlink:href="#shape3"
+         id="use9" />
+    </g>
+    <g
+       id="shape3"
+       transform="translate(1.3,1.15)">
+      <path
+         d="m 1.25,-0.05 q 0,1.2 -1.3,1.2 L -0.45,1.1 Q -1,1 -1.2,0.55 l -0.05,-0.5 -0.05,-0.1 0.05,-0.25 0.2,-0.55 q 0.3,-0.4 1.05,-0.3 l 0.95,0.35 0.3,0.5 v 0.25"
+         fill="#6b6b6b"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path10" />
+    </g>
+  </defs>
+</svg>

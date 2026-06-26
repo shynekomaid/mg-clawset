@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   ffdec:objectType="frame"
+   height="14.6"
+   width="21.700001"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="2.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:ffdec="https://www.free-decompiler.com/flash">
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     fit-margin-top="5"
+     fit-margin-left="5"
+     fit-margin-right="5"
+     fit-margin-bottom="5" />
+  <g
+     transform="translate(10.65,8.55)"
+     id="g1">
+    <use
+       ffdec:characterId="4210"
+       height="14.65"
+       transform="translate(-10.65,-8.6)"
+       width="21.700001"
+       xlink:href="#shape0"
+       id="use1" />
+  </g>
+  <defs
+     id="defs3">
+    <g
+       id="shape0"
+       transform="translate(10.65,8.6)">
+      <path
+         d="m 10.1,-8.5 q 0.65,-0.05 0.95,0.9 v 4.75 Q 10.45,-2.4 8.8,-2.4 L 2.7,-2.45 v 1.3 q 0.15,2.2 -0.1,3.3 l 0.3,0.3 0.5,-0.1 q 1.1,0 1.1,1.4 0,1.65 -0.4,2.3 h -7.8 q -0.4,-0.65 -0.4,-2.3 0,-1.4 1.1,-1.4 l 0.5,0.1 0.3,-0.3 q -0.25,-1.1 -0.1,-3.3 l 0.05,-1.3 -6.15,0.05 q -1.65,0 -2.25,-0.45 V -7.6 q 0.3,-0.95 0.95,-0.9 l 0.25,0.05 2.05,-0.1 H 7.8 l 2.05,0.1 0.25,-0.05 m -9.6,6 h -0.55 v 1.45 L -0.1,1.15 -0.25,2 h 0.9 L 0.5,1.15 0.45,-1.05 0.5,-2.5 M 8.95,-5.05 8.9,-5.75 V -6.1 L 7.8,-6.2 H -7.4 l -1.1,0.1 v 0.35 l -0.05,0.7 1.45,0.1 H 7.5 l 1.45,-0.1 M 2.1,4.05 H -1.7 -1.95 V 4.3 L 0.2,4.2 2.35,4.3 V 4.05 H 2.1"
+         fill="#6b6b6b"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path1" />
+      <path
+         d="M 0.5,-2.5 0.45,-1.05 0.5,1.15 0.65,2 h -0.9 l 0.15,-0.85 0.05,-2.2 V -2.5 H 0.5 M 2.1,4.05 H 2.35 V 4.3 L 0.2,4.2 -1.95,4.3 V 4.05 h 0.25 3.8"
+         fill="#cccccc"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path2" />
+      <path
+         d="M 8.95,-5.05 7.5,-4.95 H -7.1 l -1.45,-0.1 0.05,-0.7 V -6.1 l 1.1,-0.1 H 7.8 l 1.1,0.1 v 0.35 l 0.05,0.7"
+         fill="#cbbbbb"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path3" />
+    </g>
+  </defs>
+</svg>

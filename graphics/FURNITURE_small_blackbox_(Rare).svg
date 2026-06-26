@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   ffdec:objectType="frame"
+   height="34.798576"
+   width="31.9475"
+   version="1.1"
+   id="svg14"
+   sodipodi:docname="2.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:ffdec="https://www.free-decompiler.com/flash">
+  <sodipodi:namedview
+     id="namedview14"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     fit-margin-top="5"
+     fit-margin-left="5"
+     fit-margin-right="5"
+     fit-margin-bottom="5" />
+  <g
+     transform="translate(15.9742,19.400391)"
+     id="g2">
+    <use
+       ffdec:characterId="3500"
+       height="8"
+       transform="matrix(0.8807,-0.0357,-0.0039,0.8327,-4.3901,-19.1378)"
+       width="10.8"
+       xlink:href="#sprite0"
+       id="use1" />
+    <use
+       ffdec:characterId="4170"
+       height="38.099998"
+       transform="translate(-19.1,-19.5)"
+       width="38.200001"
+       xlink:href="#sprite1"
+       id="use2" />
+  </g>
+  <defs
+     id="defs14">
+    <g
+       id="sprite0"
+       transform="translate(5.4,4)">
+      <use
+         ffdec:characterId="43"
+         height="8"
+         transform="translate(-5.4,-4)"
+         width="10.8"
+         xlink:href="#shape0"
+         id="use3" />
+    </g>
+    <g
+       id="shape0"
+       transform="translate(5.4,4)">
+      <path
+         d="m 2.9,-0.35 q 0,-1.25 1.25,-1.25 1.25,0 1.25,1.2 0,1.3 -1.25,1.3 Q 3.6,0.9 3.25,0.5 2.9,0.15 2.9,-0.35 m 0.35,-2.3 q 0,0.55 -0.35,0.9 -0.4,0.45 -1,0.45 -1.35,0 -1.35,-1.4 0,-1.3 1.35,-1.3 1.35,0 1.35,1.35 m -3.1,1.9 h 0.2 q 2.6,0.1 2.6,2.8 l -0.3,1 Q 2.05,4 0.45,4 H 0.35 0.15 0.1 -0.45 q -1.6,0 -2.2,-0.95 l -0.3,-1 q 0,-2.8 2.8,-2.8 h 0.3 M -1.55,-4 q 1.35,0 1.35,1.35 0,0.55 -0.4,0.9 -0.4,0.45 -0.95,0.45 -1.4,0 -1.4,-1.4 0,-1.3 1.4,-1.3 m -2.6,2.4 q 1.25,0 1.25,1.25 0,0.5 -0.35,0.85 -0.35,0.4 -0.9,0.4 -1.25,0 -1.25,-1.3 0,-1.2 1.25,-1.2"
+         fill="#777777"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path3" />
+    </g>
+    <g
+       id="sprite1"
+       transform="translate(19.1,19.55)">
+      <use
+         ffdec:characterId="4169"
+         height="37.099998"
+         transform="translate(-19.1,-18.55)"
+         width="38.200001"
+         xlink:href="#sprite2"
+         id="use4" />
+    </g>
+    <g
+       id="sprite2"
+       transform="translate(19.1,18.5)">
+      <use
+         ffdec:characterId="4166"
+         height="24.25"
+         transform="translate(-12.5,-12.1)"
+         width="25"
+         xlink:href="#sprite3"
+         id="use5" />
+      <use
+         ffdec:characterId="4166"
+         height="24.25"
+         transform="matrix(1.2779,0,0,1.2779,-15.9742,-15.4631)"
+         width="25"
+         xlink:href="#sprite4"
+         id="use6" />
+      <use
+         ffdec:characterId="4166"
+         height="24.25"
+         transform="translate(-12.5,-12.1)"
+         width="25"
+         xlink:href="#sprite3"
+         id="use7" />
+      <use
+         ffdec:characterId="4166"
+         height="24.25"
+         transform="translate(-12.5,-12.1)"
+         width="25"
+         xlink:href="#sprite3"
+         id="use8" />
+      <use
+         ffdec:characterId="4168"
+         height="13.5"
+         transform="translate(-7.2,-6.4)"
+         width="14.25"
+         xlink:href="#sprite5"
+         id="use9" />
+    </g>
+    <g
+       id="sprite3"
+       transform="translate(12.5,12.1)">
+      <use
+         ffdec:characterId="4165"
+         height="24.25"
+         transform="translate(-12.5,-12.1)"
+         width="25"
+         xlink:href="#shape1"
+         id="use10" />
+    </g>
+    <g
+       id="shape1"
+       transform="translate(12.5,12.1)">
+      <path
+         d="m 12.5,-8.2 -0.4,4.3 0.05,7.45 V 7.3 L 12,8.45 l 0.15,0.9 -0.1,0.65 0.05,0.25 q 0,0.65 -0.7,1.05 l -0.6,0.3 -8.45,0.45 h -4.7 l -8.45,-0.45 -0.6,-0.3 q -0.7,-0.4 -0.7,-1.05 L -12.05,10 -12.15,9.35 -12,8.45 -12.15,7.3 V 3.55 l 0.05,-7.45 -0.4,-4.3 q 0,-1.5 0.65,-2.15 l 0.35,-1.1 q 0.5,-0.75 1.4,-0.6 h 9.9 0.4 9.9 q 0.9,-0.15 1.4,0.6 l 0.35,1.1 Q 12.5,-9.7 12.5,-8.2 M 8.85,-8.5 H 0.2 -0.2 -8.85 l 0.4,3.75 0.1,4.95 -0.1,3.3 q 0.15,2.1 0,3.9 l -0.1,1 q 2.3,-0.25 6.2,0 h 4.7 q 3.9,-0.25 6.2,0 l -0.1,-1 Q 8.3,5.6 8.45,3.5 l -0.1,-3.3 0.1,-4.95 0.4,-3.75"
+         fill="#6b6b6b"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path10" />
+      <path
+         d="m 8.85,-8.5 -0.4,3.75 -0.1,4.95 0.1,3.3 q -0.15,2.1 0,3.9 l 0.1,1 q -2.3,-0.25 -6.2,0 h -4.7 q -3.9,-0.25 -6.2,0 l 0.1,-1 q 0.15,-1.8 0,-3.9 l 0.1,-3.3 -0.1,-4.95 -0.4,-3.75 h 8.65 0.4 8.65"
+         fill="#6d6d6d"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path11" />
+    </g>
+    <g
+       id="sprite4"
+       transform="translate(12.5,12.1)">
+      <use
+         ffdec:characterId="4165"
+         height="24.25"
+         transform="translate(-12.5,-12.1)"
+         width="25"
+         xlink:href="#shape2"
+         id="use11" />
+    </g>
+    <g
+       id="shape2"
+       transform="translate(12.5,12.1)">
+      <path
+         d="m 12.5,-8.2 -0.4,4.3 0.05,7.45 V 7.3 L 12,8.45 l 0.15,0.9 -0.1,0.65 0.05,0.25 q 0,0.65 -0.7,1.05 l -0.6,0.3 -8.45,0.45 h -4.7 l -8.45,-0.45 -0.6,-0.3 q -0.7,-0.4 -0.7,-1.05 L -12.05,10 -12.15,9.35 -12,8.45 -12.15,7.3 V 3.55 l 0.05,-7.45 -0.4,-4.3 q 0,-1.5 0.65,-2.15 l 0.35,-1.1 q 0.5,-0.75 1.4,-0.6 h 9.9 0.4 9.9 q 0.9,-0.15 1.4,0.6 l 0.35,1.1 Q 12.5,-9.7 12.5,-8.2 M 8.85,-8.5 H 0.2 -0.2 -8.85 l 0.4,3.75 0.1,4.95 -0.1,3.3 q 0.15,2.1 0,3.9 l -0.1,1 q 2.3,-0.25 6.2,0 h 4.7 q 3.9,-0.25 6.2,0 l -0.1,-1 Q 8.3,5.6 8.45,3.5 l -0.1,-3.3 0.1,-4.95 0.4,-3.75"
+         fill="#6b6b6b"
+         fill-opacity="0.478431"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path12" />
+      <path
+         d="m 8.85,-8.5 -0.4,3.75 -0.1,4.95 0.1,3.3 q -0.15,2.1 0,3.9 l 0.1,1 q -2.3,-0.25 -6.2,0 h -4.7 q -3.9,-0.25 -6.2,0 l 0.1,-1 q 0.15,-1.8 0,-3.9 l 0.1,-3.3 -0.1,-4.95 -0.4,-3.75 h 8.65 0.4 8.65"
+         fill="#6d6d6d"
+         fill-opacity="0.478431"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path13" />
+    </g>
+    <g
+       id="sprite5"
+       transform="translate(7.15,6.75)">
+      <use
+         ffdec:characterId="4167"
+         height="12.5"
+         transform="translate(-6.65,-6.25)"
+         width="13.25"
+         xlink:href="#shape3"
+         id="use13" />
+    </g>
+    <g
+       id="shape3"
+       transform="translate(7.15,6.75)">
+      <path
+         d="M 3.55,2.1 3.5,1.2 H -4.55 L -4.6,2.1 -4.55,3.6 H 3.5 L 3.55,2.1 m 2.05,-2.8 0.1,0.4 v 0.1 l 0.2,1.25 0.05,0.15 0.1,2.05 0.05,0.9 v 0.1 L 6.05,5 5.15,5.75 H -6.2 L -7.1,5 -7.15,4.25 V 4.15 L -7.1,3.25 -7,1.2 -6.95,1.05 -6.75,-0.2 v -0.1 l 0.1,-0.4 Q -6.45,-0.95 -6,-1 H 4.95 l 0.65,0.3 m -0.25,-6.05 0.1,0.2 q 0.7,0.2 0.5,2.05 v 1.4 L 5.7,-2.6 H 1.65 L 1.35,-2.9 1.2,-3.1 Q 1,-3.55 1.15,-4.4 L 1.3,-5.85 1.6,-6.4 1.8,-6.75 h 3.55 m -8,0.35 0.3,0.55 0.15,1.45 q 0.15,0.9 -0.05,1.3 l -0.15,0.2 -0.3,0.3 H -6.75 L -6.95,-3.1 -7,-4.5 q -0.2,-1.85 0.5,-2.05 l 0.15,-0.2 h 3.55 l 0.15,0.35"
+         fill="#ffffff"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path14" />
+    </g>
+  </defs>
+</svg>

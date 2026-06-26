@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   ffdec:objectType="frame"
+   height="21.044737"
+   width="20.365385"
+   version="1.1"
+   id="svg3"
+   sodipodi:docname="1.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:ffdec="https://www.free-decompiler.com/flash">
+  <sodipodi:namedview
+     id="namedview3"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     fit-margin-top="5"
+     fit-margin-left="5"
+     fit-margin-right="5"
+     fit-margin-bottom="5" />
+  <g
+     transform="translate(10.165385,10.5)"
+     id="g1">
+    <use
+       ffdec:characterId="3079"
+       height="21.049999"
+       transform="translate(-10.15,-10.5)"
+       width="20.35"
+       xlink:href="#shape0"
+       id="use1" />
+  </g>
+  <defs
+     id="defs3">
+    <g
+       id="shape0"
+       transform="translate(10.15,10.5)">
+      <path
+         d="M 7.05,-7.95 Q 7.35,-8 7.6,-8.15 H 8.05 V 6 L 8.15,8 6.45,8.1 -6.2,8.15 h -1.3 l -0.15,-14.8 -0.2,-1.3 h 14.9 m -0.6,0.9 h -0.2 l -0.2,-0.1 -7.4,-0.05 -4.7,0.05 q -0.35,0.05 -0.35,0.6 l 0.1,0.45 -0.3,1.95 -0.05,3.2 q -0.15,3.35 0.1,4.8 V 3.9 l -0.05,0.45 0.1,0.6 0.7,0.1 0.55,-0.1 L 6.25,4.9 6.9,4.2 6.8,4.1 q 0.45,-1.75 0.45,-9.4 0,-1.6 -0.8,-1.75"
+         fill="#ffffff"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path1" />
+      <path
+         d="m 6.45,-7.05 q 0.8,0.15 0.8,1.75 0,7.65 -0.45,9.4 L 6.9,4.2 6.25,4.9 -5.25,4.95 -5.8,5.05 -6.5,4.95 -6.6,4.35 -6.55,3.9 V 3.85 Q -6.8,2.4 -6.65,-0.95 l 0.05,-3.2 0.3,-1.95 -0.1,-0.45 q 0,-0.55 0.35,-0.6 l 4.7,-0.05 7.4,0.05 0.2,0.1 h 0.2 m 0.6,-0.9 h -14.9 l 0.2,1.3 0.15,14.8 h 1.3 L 6.45,8.1 8.15,8 8.05,6 V -8.15 H 7.6 Q 7.35,-8 7.05,-7.95 M 8,-10.5 q 0.95,0.1 1.45,0.55 0.75,0.15 0.75,1.4 l -0.05,0.5 v 14 L 10.05,8.5 Q 9.9,10.25 9.15,10.3 L 8.5,10.5 -6.2,10.45 q -2.55,0.3 -3.35,-0.35 L -9.7,9.65 Q -10.25,9.3 -10.15,8.4 L -10,-6.85 -9.8,-8.2 -10.1,-9 q 0,-0.7 1.05,-1.15 H 5.8 L 8,-10.5 M 1.45,-3.2 1.8,-3.15 Q 3.05,-2.75 3.05,-2 L 2.9,-1.15 q 0.85,0.2 1.3,0.95 L 4.5,0.9 4.4,1.75 Q 4.25,2.1 3.35,2.65 H 0 L -3,2.2 -3.25,2.1 Q -4.15,2 -4.1,1.15 q 0,-1.4 0.95,-1.8 l -0.15,-0.8 q 0,-1.2 1.4,-1.8 v -0.1 q 0,-1 1.45,-1.85 0.7,-0.45 1.05,-0.4 0.6,-0.4 0.6,0.45 L 1,-4.2 l 0.45,1 M 5.7,-6.05 -1.35,-6 -5.45,-6.05 q 0.3,0.9 0.3,2.5 l -0.2,2.65 q 0.1,3.1 -0.05,4.55 H 5.8 L 5.65,-5.3 5.7,-6.05 M -0.1,-4 V -4.05 H -0.15 L -0.1,-4"
+         fill="#6b6b6b"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path2" />
+      <path
+         d="M 5.7,-6.05 5.65,-5.3 5.8,3.65 H -5.4 Q -5.25,2.2 -5.35,-0.9 l 0.2,-2.65 q 0,-1.6 -0.3,-2.5 L -1.35,-6 5.7,-6.05 M 1.45,-3.2 1,-4.2 1.2,-5.15 Q 1.2,-6 0.6,-5.6 0.25,-5.65 -0.45,-5.2 -1.9,-4.35 -1.9,-3.35 v 0.1 q -1.4,0.6 -1.4,1.8 l 0.15,0.8 Q -4.1,-0.25 -4.1,1.15 -4.15,2 -3.25,2.1 L -3,2.2 0,2.65 H 3.35 Q 4.25,2.1 4.4,1.75 L 4.5,0.9 4.2,-0.2 Q 3.75,-0.95 2.9,-1.15 L 3.05,-2 q 0,-0.75 -1.25,-1.15 L 1.45,-3.2"
+         fill="#adc3b1"
+         fill-rule="evenodd"
+         stroke="none"
+         id="path3" />
+    </g>
+  </defs>
+</svg>
