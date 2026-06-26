@@ -315,7 +315,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
   // Numbered legend badges — only when the checklist panel is open
   const labelOverlays = labelNumbers && checklistOpen
     ? placed.map((p) => {
-        const { minR, maxR, minC, maxC } = getVisualBounds(p.item.shape);
+        const { minR, minC, maxC } = getVisualBounds(p.item.shape);
         const n = labelNumbers[p.item.id];
         if (!n || hoverItemId === p.item.id) return null;
         const touchesCeiling = (p.row + minR) === 0;
@@ -364,7 +364,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
   const sortedPlaced = useMemo(() => [...placed].sort((a, b) => a.row - b.row || a.col - b.col), [placed]);
   const imageOverlays = !expertView
     ? sortedPlaced.map((p) => {
-        const { minR, maxR, minC, maxC } = getVisualBounds(p.item.shape);
+const { minR, maxR, minC, maxC } = getVisualBounds(p.item.shape);
         const visualRows = maxR - minR + 1;
         const visualCols = maxC - minC + 1;
         const anchorAlign = getImageAlignment(p.item.shape);
