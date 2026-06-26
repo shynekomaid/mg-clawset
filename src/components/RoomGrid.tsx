@@ -1,9 +1,17 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { CSSProperties, DragEvent } from 'react';
 import type { FurnitureItem, PlacedFurniture, RoomConfig } from '../types/furniture';
 import { getRoomConfig } from '../types/furniture';
 import { findAllAnchored, canPlaceGroup } from '../utils/anchorHelpers';
 import { buildOccupancy, buildAnchorPointSet, canPlace, getVisualBounds, getImageAlignment } from '../utils/gridHelpers';
+import { SVG_NEEDS_ROTATION } from '../utils/rotationAssets';
+
+// Idols are identified by image_url containing 'special_*idol'
+const IDOL_RE = /special_\w*(idol)/i;
+
+function isIdol(item: FurnitureItem): boolean {
+  return IDOL_RE.test(item.image_url);
+}
 
 function getTopAnchorOffset(shape: number[][]): number {
   let offset = 0;
@@ -43,6 +51,8 @@ interface Props {
   onHoverItem?: (id: string | null) => void;
   /** Click on a piece (cell-accurate): open its checklist entry. */
   onSelectItem?: (id: string) => void;
+  /** When true, render checklist number badges. */
+  checklistOpen?: boolean;
 }
 
 function buildShapeTypeGrid(placed: PlacedFurniture[], cfg: RoomConfig): (number | null)[][] {
@@ -71,20 +81,46 @@ function buildShapeTypeGrid(placed: PlacedFurniture[], cfg: RoomConfig): (number
 
 type DragPayload =
   | { type: 'new'; item: FurnitureItem }
-  | { type: 'move'; instanceId: string; item: FurnitureItem };
+  | { type: 'move'; instanceId: string; item: FurnitureItem; grabDRow: number; grabDCol: number };
 
 interface HoverInfo {
   shapes: { row: number; col: number; shape: number[][] }[];
   valid: boolean;
 }
 
-export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView, roomIndex = 0, labelNumbers, hoverItemId, onHoverItem, onSelectItem }: Props) {
+export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView, roomIndex = 0, labelNumbers, hoverItemId, onHoverItem, onSelectItem, checklistOpen = false }: Props) {
   const cfg = getRoomConfig(roomIndex);
   const { cols, rows } = cfg;
 
   const gridRef = useRef<HTMLDivElement>(null);
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  const [gridSize, setGridSize] = useState<{ w: number; h: number } | null>(null);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const dragPayloadRef = useRef<DragPayload | null>(null);
+
+  // Measure available space and fit the grid with square cells.
+  useEffect(() => {
+    const el = gridWrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return;
+      const aspect = cols / rows;
+      let w: number, h: number;
+      if (rect.width / rect.height > aspect) {
+        h = rect.height;
+        w = h * aspect;
+      } else {
+        w = rect.width;
+        h = w / aspect;
+      }
+      setGridSize({ w: Math.floor(w), h: Math.floor(h) });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [cols, rows]);
 
   const occupancy = buildOccupancy(placed, cfg);
   const anchorPoints = buildAnchorPointSet(placed, cfg);
@@ -130,10 +166,10 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
       const anchoredIds = findAllAnchored(payload.instanceId, placed);
       const groupIds = new Set([payload.instanceId, ...anchoredIds]);
 
-      const off = getTopAnchorOffset(payload.item.shape);
-      const placeRow = cell.row - off;
+      const placeRow = cell.row - payload.grabDRow;
+      const placeCol = cell.col - payload.grabDCol;
       const dRow = placeRow - target.row;
-      const dCol = cell.col - target.col;
+      const dCol = placeCol - target.col;
 
       const movedGroup = placed
         .filter(p => groupIds.has(p.instanceId))
@@ -173,10 +209,10 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
       const anchoredIds = findAllAnchored(payload.instanceId, placed);
       const groupIds = new Set([payload.instanceId, ...anchoredIds]);
 
-      const off = getTopAnchorOffset(payload.item.shape);
-      const placeRow = cell.row - off;
+      const placeRow = cell.row - payload.grabDRow;
+      const placeCol = cell.col - payload.grabDCol;
       const dRow = placeRow - target.row;
-      const dCol = cell.col - target.col;
+      const dCol = placeCol - target.col;
 
       const movedGroup = placed
         .filter(p => groupIds.has(p.instanceId))
@@ -186,7 +222,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
       const ap = buildAnchorPointSet(placed, cfg, undefined, groupIds);
 
       if (canPlaceGroup(movedGroup, occ, ap, cfg)) {
-        onMove(payload.instanceId, placeRow, cell.col);
+        onMove(payload.instanceId, placeRow, placeCol);
       }
       dragPayloadRef.current = null;
       return;
@@ -231,27 +267,41 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
   const [draggingId, setDraggingId] = useState<string | null>(null);
 
   const handlePieceDragStart = useCallback((e: DragEvent, p: PlacedFurniture) => {
+    // Record where on the item the user grabbed (offset from anchor cell)
+    let grabDRow = 0, grabDCol = 0;
+    if (gridRef.current) {
+      const rect = gridRef.current.getBoundingClientRect();
+      const cellW = rect.width / cols;
+      const cellH = rect.height / rows;
+      const cursorCol = Math.floor((e.clientX - rect.left) / cellW);
+      const cursorRow = Math.floor((e.clientY - rect.top) / cellH);
+      grabDRow = cursorRow - p.row;
+      grabDCol = cursorCol - p.col;
+    }
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', p.instanceId);
-    dragPayloadRef.current = { type: 'move', instanceId: p.instanceId, item: p.item };
+    dragPayloadRef.current = { type: 'move', instanceId: p.instanceId, item: p.item, grabDRow, grabDCol };
     setDraggingId(p.instanceId);
-  }, []);
+  }, [cols]);
 
   const handlePieceDragEnd = useCallback(() => {
     setDraggingId(null);
     setHoverInfo(null);
+    dragPayloadRef.current = null;
   }, []);
 
   const gridStyle: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: `repeat(${cols}, 1fr)`,
     gridTemplateRows: `repeat(${rows}, 1fr)`,
-    width: '100%',
-    aspectRatio: `${cols} / ${rows}`,
+    width: gridSize ? gridSize.w : '100%',
+    height: gridSize ? gridSize.h : 'auto',
+    aspectRatio: gridSize ? undefined : `${cols} / ${rows}`,
     background: 'transparent',
     borderRadius: 8,
     overflow: 'hidden',
     position: 'relative',
+    flexShrink: 0,
   };
 
   const cellBase: CSSProperties = {
@@ -262,21 +312,37 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
     overflow: 'hidden',
   };
 
-  // Numbered legend badges (work in both views, match the checklist numbers)
-  const labelOverlays = labelNumbers
+  // Numbered legend badges — only when the checklist panel is open
+  const labelOverlays = labelNumbers && checklistOpen
     ? placed.map((p) => {
-        const { minR, minC } = getVisualBounds(p.item.shape);
+        const { minR, maxR, minC, maxC } = getVisualBounds(p.item.shape);
         const n = labelNumbers[p.item.id];
-        if (!n) return null;
+        if (!n || hoverItemId === p.item.id) return null;
+        const touchesCeiling = (p.row + minR) === 0;
+        const touchesLeftWall = (p.col + minC) === 0;
+        let labelLeft: string, labelTop: string;
+        let labelTransform: string | undefined;
+        if (touchesCeiling && touchesLeftWall) {
+          labelLeft = `calc(${((p.col + maxC + 1) / cols) * 100}% + 2px)`;
+          labelTop = `calc(${((p.row + minR) / rows) * 100}% + 2px)`;
+        } else if (touchesCeiling) {
+          labelLeft = `${((p.col + minC) / cols) * 100}%`;
+          labelTop = `calc(${((p.row + minR) / rows) * 100}% + 2px)`;
+          labelTransform = 'translateX(calc(-100% - 2px))';
+        } else {
+          labelLeft = `calc(${((p.col + minC) / cols) * 100}% + 2px)`;
+          labelTop = `calc(${((p.row + minR) / rows) * 100}% + 2px)`;
+        }
         return (
           <div
             key={`label-${p.instanceId}`}
             style={{
               position: 'absolute',
-              left: `calc(${((p.col + minC) / cols) * 100}% + 2px)`,
-              top: `calc(${((p.row + minR) / rows) * 100}% + 2px)`,
-              zIndex: 4,
-              background: hoverItemId === p.item.id ? 'var(--accent)' : 'rgba(0,0,0,0.7)',
+              left: labelLeft,
+              top: labelTop,
+              transform: labelTransform,
+              zIndex: 500,
+              background: 'rgba(0,0,0,0.7)',
               color: '#fff',
               borderRadius: 4,
               fontSize: 10,
@@ -293,13 +359,16 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
       })
     : null;
 
-  // Image overlays for normal view
+  // Image overlays for normal view — sorted by row (ascending) so items closer to the viewer (higher row) render on top;
+  // column tiebreaker keeps rendering order deterministic for items on the same row.
+  const sortedPlaced = useMemo(() => [...placed].sort((a, b) => a.row - b.row || a.col - b.col), [placed]);
   const imageOverlays = !expertView
-    ? placed.map((p) => {
+    ? sortedPlaced.map((p) => {
         const { minR, maxR, minC, maxC } = getVisualBounds(p.item.shape);
         const visualRows = maxR - minR + 1;
         const visualCols = maxC - minC + 1;
         const anchorAlign = getImageAlignment(p.item.shape);
+        const needsRotation = SVG_NEEDS_ROTATION.has(p.item.image_url);
 
         const fixedSrc = p.item.image_url.startsWith('public/')
           ? p.item.image_url.slice(6)
@@ -309,8 +378,6 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
         const top = `${((p.row + minR) / rows) * 100}%`;
         const width = `${(visualCols / cols) * 100}%`;
         const height = `${(visualRows / rows) * 100}%`;
-
-        const fillHeight = anchorAlign === 'top' || anchorAlign === 'bottom';
         const isDragging = draggingId === p.instanceId;
 
         const isHovered = hoverItemId === p.item.id;
@@ -321,8 +388,8 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
             draggable
             onDragStart={(e) => {
               const t = pieceAtEvent(e);
-              if (!t) { e.preventDefault(); return; }
-              handlePieceDragStart(e, t);
+              // Fall back to p from closure when cursor is on an empty bounding-box cell (L/T/I shapes)
+              handlePieceDragStart(e, t ?? p);
             }}
             onDragEnd={handlePieceDragEnd}
             onMouseMove={(e) => onHoverItem?.(pieceAtEvent(e)?.item.id ?? null)}
@@ -333,7 +400,8 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
               top,
               width,
               height,
-              zIndex: isHovered ? 3 : 2,
+              zIndex: 2 + p.row + (isHovered ? 100 : 0),
+              borderRadius: 3,
               cursor: 'grab',
               opacity: isDragging ? 0.3 : 1,
               transition: 'opacity 0.15s',
@@ -345,26 +413,69 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
             title={`${p.item.name} \u2014 drag to move \u00b7 click for checklist \u00b7 right-click to remove`}
             onClick={(e) => {
               const t = pieceAtEvent(e);
-              if (t) onSelectItem?.(t.item.id);
+              onSelectItem?.((t ?? p).item.id);
             }}
             onContextMenu={(e) => {
               e.preventDefault();
               const t = pieceAtEvent(e);
-              if (t) onRemove(t.instanceId);
+              onRemove((t ?? p).instanceId);
             }}
           >
-            <img
-              src={fixedSrc}
-              alt={p.item.name}
-              draggable={false}
-              style={{
-                height: '100%',
-                width: fillHeight ? 'auto' : '100%',
-                maxWidth: fillHeight ? 'none' : '100%',
-                objectFit: fillHeight ? undefined : 'contain',
-                filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
-              }}
-            />
+            {needsRotation ? (
+              <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+                <img
+                  src={fixedSrc}
+                  alt={p.item.name}
+                  draggable={false}
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    transform: 'translate(-50%, -50%) rotate(90deg) scale(1.333)',
+                    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
+                  }}
+                />
+              </div>
+            ) : (
+              <img
+                src={fixedSrc}
+                alt={p.item.name}
+                draggable={false}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  objectPosition: anchorAlign === 'top' ? 'center top' : anchorAlign === 'bottom' ? 'center bottom' : 'center',
+                  filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.3))',
+                }}
+              />
+            )}
+            {isHovered && (
+              <div style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                background: 'rgba(0,0,0,0.75)',
+                borderRadius: 4,
+                padding: '3px 6px',
+                pointerEvents: 'none',
+                zIndex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1,
+              }}>
+                {p.item.appeal ? <span style={{ color: '#e06070', fontSize: 9, lineHeight: 1.2 }}>A:{p.item.appeal}</span> : null}
+                {p.item.comfort ? <span style={{ color: '#7ab8d4', fontSize: 9, lineHeight: 1.2 }}>C:{p.item.comfort}</span> : null}
+                {p.item.stimulation ? <span style={{ color: '#d4b87a', fontSize: 9, lineHeight: 1.2 }}>S:{p.item.stimulation}</span> : null}
+                {p.item.health ? <span style={{ color: '#7ad48a', fontSize: 9, lineHeight: 1.2 }}>H:{p.item.health}</span> : null}
+                {p.item.mutation ? <span style={{ color: '#c87ad4', fontSize: 9, lineHeight: 1.2 }}>M:{p.item.mutation}</span> : null}
+              </div>
+            )}
           </div>
         );
       })
@@ -372,7 +483,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
 
   // Draggable overlays for expert view
   const expertDragOverlays = expertView
-    ? placed.map((p) => {
+    ? sortedPlaced.map((p) => {
         const shape = p.item.shape;
         let minR = shape.length, maxR = -1, minC = shape[0]?.length ?? 0, maxC = -1;
         for (let r = 0; r < shape.length; r++) {
@@ -399,8 +510,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
             draggable
             onDragStart={(e) => {
               const t = pieceAtEvent(e);
-              if (!t) { e.preventDefault(); return; }
-              handlePieceDragStart(e, t);
+              handlePieceDragStart(e, t ?? p);
             }}
             onDragEnd={handlePieceDragEnd}
             style={{
@@ -409,7 +519,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
               top,
               width,
               height,
-              zIndex: 3,
+              zIndex: 3 + p.row,
               cursor: 'grab',
               opacity: isDragging ? 0.3 : 1,
               background: 'transparent',
@@ -417,12 +527,12 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
             title={`${p.item.name} \u2014 drag to move \u00b7 click for checklist \u00b7 right-click to remove`}
             onClick={(e) => {
               const t = pieceAtEvent(e);
-              if (t) onSelectItem?.(t.item.id);
+              onSelectItem?.((t ?? p).item.id);
             }}
             onContextMenu={(e) => {
               e.preventDefault();
               const t = pieceAtEvent(e);
-              if (t) onRemove(t.instanceId);
+              onRemove((t ?? p).instanceId);
             }}
           />
         );
@@ -430,6 +540,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
     : null;
 
   return (
+    <div ref={gridWrapRef} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 0, overflow: 'hidden' }}>
     <div
       ref={gridRef}
       style={gridStyle}
@@ -478,36 +589,33 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
           );
         }),
       )}
-      {imageOverlays}
-      {/* Hovered item: highlight its actual solid cells (bounding boxes lie for L/T shapes) */}
-      {hoverItemId && placed.filter((p) => p.item.id === hoverItemId).map((p) =>
+      {/* Idol cell overlays */}
+      {!expertView && placed.filter((p) => isIdol(p.item)).flatMap((p) =>
         p.item.shape.flatMap((shapeRow, r) =>
           shapeRow.map((t, c) => {
             if (t !== 2 && t !== 3) return null;
             const gr = p.row + r;
             const gc = p.col + c;
-            if (gr < 0 || gr >= rows || gc < 0 || gc >= cols) return null;
+            if (gr < 0 || gr >= cfg.rows || gc < 0 || gc >= cfg.cols) return null;
             return (
-              <div
-                key={`hl-${p.instanceId}-${r}-${c}`}
-                style={{
-                  position: 'absolute',
-                  left: `${(gc / cols) * 100}%`,
-                  top: `${(gr / rows) * 100}%`,
-                  width: `${(1 / cols) * 100}%`,
-                  height: `${(1 / rows) * 100}%`,
-                  background: 'rgba(193,73,83,0.18)',
-                  boxShadow: 'inset 0 0 0 2px var(--accent)',
-                  borderRadius: 3,
-                  zIndex: 5,
-                  pointerEvents: 'none',
-                  boxSizing: 'border-box',
-                }}
-              />
+              <div key={`idol-${p.instanceId}-${r}-${c}`} style={{
+                position: 'absolute',
+                left: `${(gc / cfg.cols) * 100}%`,
+                top: `${(gr / cfg.rows) * 100}%`,
+                width: `${(1 / cfg.cols) * 100}%`,
+                height: `${(1 / cfg.rows) * 100}%`,
+                background: 'rgba(255, 160, 0, 0.25)',
+                border: '1px solid rgba(255, 160, 0, 0.5)',
+                borderRadius: 2,
+                zIndex: 1,
+                pointerEvents: 'none',
+                boxSizing: 'border-box',
+              }} />
             );
           }),
         ),
       )}
+      {imageOverlays}
       {labelOverlays}
       {expertDragOverlays}
       {/* Hover highlight overlay */}
@@ -529,7 +637,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
                   ? 'rgba(100,200,100,0.35)'
                   : 'rgba(200,100,100,0.35)',
                 border: `2px solid ${valid ? 'rgba(100,200,100,0.7)' : 'rgba(200,100,100,0.7)'}`,
-                zIndex: 10,
+                zIndex: 100,
                 pointerEvents: 'none',
                 boxSizing: 'border-box',
               }}
@@ -537,6 +645,7 @@ export default function RoomGrid({ placed, onPlace, onRemove, onMove, expertView
           );
         }),
       )}
+    </div>
     </div>
   );
 }

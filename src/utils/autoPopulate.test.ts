@@ -435,4 +435,33 @@ describe('autoPopulateRoom', () => {
     expect(fractions.at(-1)).toBe(1);
     expect(fractions.every((f, i) => i === 0 || f >= fractions[i - 1])).toBe(true);
   });
+
+  it('excludeItemIds prevents owned items from being placed', () => {
+    const idol = makeItem({ name: 'Idol of Chastity', comfort: 5, shape: [[2]] });
+    const sofa = makeItem({ name: 'sofa', comfort: 2, shape: [[2]] });
+    // Room needs comfort floor of 4; idol has high comfort:5 but is excluded.
+    const result = autoPopulateRoom(makeOpts({
+      weights: { stimulation: 1 } as Partial<Record<StatKey, number>>,
+      minStats: { comfort: 4 },
+      allFurniture: [idol, sofa],
+      ownership: { 'Idol of Chastity': 5, sofa: 10 },
+      excludeItemIds: ['Idol of Chastity'],
+    }));
+    // Idol should not appear (excluded), comfort floor should still be met via sofas.
+    expect(result.filter(p => p.item.name === 'Idol of Chastity')).toHaveLength(0);
+    const comfort = result.reduce((s, p) => s + p.item.comfort, 0);
+    expect(comfort).toBeGreaterThanOrEqual(4);
+  });
+
+  it('excludeItemIds does not block mustInclude items', () => {
+    const idol = makeItem({ name: 'Idol of Chastity', comfort: 5, shape: [[2]] });
+    const sofa = makeItem({ name: 'sofa', comfort: 2, shape: [[2]] });
+    const result = autoPopulateRoom(makeOpts({
+      allFurniture: [idol, sofa],
+      ownership: { 'Idol of Chastity': 1, sofa: 10 },
+      mustInclude: ['Idol of Chastity'],
+      excludeItemIds: ['Idol of Chastity'], // excluded but also forced → must win
+    }));
+    expect(result.filter(p => p.item.name === 'Idol of Chastity')).toHaveLength(1);
+  });
 });

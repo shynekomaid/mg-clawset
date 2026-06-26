@@ -49,6 +49,8 @@ export interface AutoPopulateOptions {
   minStats?: Partial<Record<StatKey, number>>;
   /** Skip the final use-everything phase that packs neutral leftovers into gaps. */
   noFillers?: boolean;
+  /** Item ids to exclude from ANY placement in this room (e.g. suppressor idols in Breeding). */
+  excludeItemIds?: string[];
 }
 
 /** One room's share of an auto-fill request (house fills carry one per room). */
@@ -57,6 +59,7 @@ export interface RoomFillPlan {
   weights: StatWeights;
   mustInclude: string[];
   minStats?: Partial<Record<StatKey, number>>;
+  excludeItemIds?: string[];
 }
 
 export interface FillProgress {
@@ -93,14 +96,19 @@ interface ScanMode {
 }
 
 function buildCandidates(opts: AutoPopulateOptions): Candidate[] {
-  const { weights, allFurniture, ownership, usedInOtherRooms, mustInclude, minStats } = opts;
+  const { weights, allFurniture, ownership, usedInOtherRooms, mustInclude, minStats, excludeItemIds } = opts;
   const mandatoryIds = new Set(mustInclude ?? []);
+  const exclusions = new Set(excludeItemIds ?? []);
   const floorStats = Object.keys(minStats ?? {}) as StatKey[];
+  // Stats with weight -2: items with ANY of these stats are completely banned.
+  const bannedStats = Object.entries(weights).filter(([, w]) => w === -2).map(([stat]) => stat as StatKey);
   const candidates: Candidate[] = [];
   for (const item of allFurniture) {
+    const mandatory = mandatoryIds.has(item.id);
+    if (exclusions.has(item.id) && !mandatory) continue;
+    if (bannedStats.some((st) => item[st] > 0) && !mandatory) continue; // -2 = absolute ban (ignored for must-include)
     const remaining = (ownership[item.id] ?? 0) - (usedInOtherRooms[item.id] ?? 0);
     if (remaining <= 0) continue;
-    const mandatory = mandatoryIds.has(item.id);
     const score = statScore(item, weights);
     // Keep items that score, are forced, can contribute to a stat floor, or
     // are harmless space fillers (score 0) for the use-everything phase.

@@ -377,10 +377,10 @@ function App() {
   const handleAutoPopulate = useCallback(async (config: {
     algorithm: AlgorithmKey;
     plans: RoomFillPlan[];
-    /** Run repeated full-house passes until the user stops; keep the best. */
-    keepSearching?: boolean;
+    /** Repeated passes until quality stalls (0 = infinite). */
+    keepSearching?: number;
   }) => {
-    const { algorithm, plans, keepSearching = false } = config;
+    const { algorithm, plans, keepSearching = 0 } = config;
     if (plans.length === 0) return;
     const makeInstanceId = () => `placed-${nextInstanceId++}`;
     // theorycrafting without a savegame: the whole in-game catalog is available
@@ -419,6 +419,16 @@ function App() {
 
     // One full-house pass: fill every planned room in order, reserving items as
     // we go. `seedBase` varies the randomized 'maximize' search between passes.
+    //
+    // Items in other rooms' `mustInclude` are reserved (marked consumed) so the
+    // current room cannot steal idols/food assigned to a different room.
+    const mustIncludeReservation: Record<string, number> = {};
+    for (const plan of plans) {
+      for (const id of plan.mustInclude) {
+        mustIncludeReservation[id] = (mustIncludeReservation[id] || 0) + 1;
+      }
+    }
+
     const fillPass = (seedBase: number) => {
       const newRooms = rooms.map((room, i) => (planned.has(i) ? [] : [...room]));
       const used: Record<string, number> = { ...reserved };
@@ -426,17 +436,26 @@ function App() {
       let achievedScore = 0;
       let cellsUsed = 0;
       for (const plan of plans) {
+        // Items assigned to other rooms via mustInclude are off-limits here.
+        const otherReserved: Record<string, number> = {};
+        for (const [id, count] of Object.entries(mustIncludeReservation)) {
+          const forThisRoom = plan.mustInclude.includes(id) ? 1 : 0;
+          const remainingReservation = count - forThisRoom;
+          if (remainingReservation > 0) otherReserved[id] = effectiveOwnership[id] ?? 0;
+        }
+
         const result = autoPopulateRoom({
           weights: plan.weights,
           minStats: plan.minStats,
           mustInclude: plan.mustInclude,
+          excludeItemIds: plan.excludeItemIds,
           algorithm,
           iterations: algorithm === 'maximize' ? KEEP_PASS_ITERATIONS : undefined,
           seed: seedBase + plan.roomIndex * 7919,
           roomIndex: plan.roomIndex,
           allFurniture,
           ownership: effectiveOwnership,
-          usedInOtherRooms: { ...used },
+          usedInOtherRooms: { ...used, ...otherReserved },
           makeInstanceId,
         });
         newRooms[plan.roomIndex] = result;
@@ -465,17 +484,20 @@ function App() {
       setFillSearch({ passes: 0, bestScore: 0 });
       let best: ReturnType<typeof fillPass> | null = null;
       let passes = 0;
+      let stalePasses = 0;
       try {
         do {
           const pass = fillPass(0x1234 + passes * 2654435761);
           passes += 1;
           if (pass.placedTotal > 0 && (best === null || pass.achievedScore > best.achievedScore)) {
             best = pass;
+            stalePasses = 0;
+          } else if (keepSearching > 0) {
+            stalePasses += 1;
           }
           setFillSearch({ passes, bestScore: best?.achievedScore ?? 0 });
-          // yield so the UI repaints and the Stop button can flip the ref
           await new Promise((r) => setTimeout(r, 0));
-        } while (!stopSearchRef.current);
+        } while (!stopSearchRef.current && (keepSearching === 0 || stalePasses < keepSearching));
       } finally {
         setFillSearch(null);
       }
@@ -483,8 +505,9 @@ function App() {
         window.alert('Nothing to place: no owned furniture with remaining copies scores positively for the selected stats.');
         return;
       }
+      const stopReason = stalePasses >= keepSearching ? ` (stopped after ${stalePasses} stale)` : '';
       updateRooms(best.newRooms);
-      setFillReport(`${reportFor(best.achievedScore, best.cellsUsed)} \u00b7 best of ${passes} passes`);
+      setFillReport(`${reportFor(best.achievedScore, best.cellsUsed)} \u00b7 best of ${passes} passes${stopReason}`);
       return;
     }
 
@@ -499,16 +522,24 @@ function App() {
       let cellsUsed = 0;
       for (let pi = 0; pi < plans.length; pi++) {
         const plan = plans[pi];
+        // Other rooms' mustInclude items are reserved (see fillPass comment).
+        const otherReserved: Record<string, number> = {};
+        for (const [id, count] of Object.entries(mustIncludeReservation)) {
+          const forThisRoom = plan.mustInclude.includes(id) ? 1 : 0;
+          const remainingReservation = count - forThisRoom;
+          if (remainingReservation > 0) otherReserved[id] = effectiveOwnership[id] ?? 0;
+        }
         const result = await autoPopulateRoomAsync({
           weights: plan.weights,
           minStats: plan.minStats,
           mustInclude: plan.mustInclude,
+          excludeItemIds: plan.excludeItemIds,
           algorithm,
           budgetMs,
           roomIndex: plan.roomIndex,
           allFurniture,
           ownership: effectiveOwnership,
-          usedInOtherRooms: { ...used },
+          usedInOtherRooms: { ...used, ...otherReserved },
           makeInstanceId,
         }, (p) => setFillProgress((pi + p.fraction) / plans.length));
         newRooms[plan.roomIndex] = result;

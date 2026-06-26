@@ -1,5 +1,6 @@
 import type { PlacedFurniture, StatKey } from '../types/furniture';
 import { ROOM_COLS, ROOM_ROWS, ATTIC_COLS, ATTIC_ROWS, ATTIC_INDEX, isAtticCellValid, getRoomLabel } from '../types/furniture';
+import { SVG_NEEDS_ROTATION } from './rotationAssets';
 
 const STATS: StatKey[] = ['appeal', 'comfort', 'stimulation', 'health', 'mutation'];
 
@@ -260,30 +261,46 @@ function drawFurniture(
     const img = loadedImages.get(fixedSrc);
     if (!img) continue;
 
-    // Maintain aspect ratio
     const imgAspect = img.naturalWidth / img.naturalHeight;
-    const cellAspect = imgW / imgH;
 
-    let drawW: number, drawH: number, drawX: number, drawY: number;
-
-    if (align === 'top' || align === 'bottom') {
+    let drawW: number, drawH: number;
+    if (imgAspect > imgW / imgH) {
+      drawW = imgW;
+      drawH = drawW / imgAspect;
+    } else {
       drawH = imgH;
       drawW = drawH * imgAspect;
-      drawX = imgX + (imgW - drawW) / 2;
-      drawY = align === 'bottom' ? imgY + imgH - drawH : imgY;
-    } else {
-      if (imgAspect > cellAspect) {
-        drawW = imgW;
-        drawH = drawW / imgAspect;
-      } else {
-        drawH = imgH;
-        drawW = drawH * imgAspect;
-      }
-      drawX = imgX + (imgW - drawW) / 2;
-      drawY = imgY + (imgH - drawH) / 2;
     }
 
-    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    const needsRotation = SVG_NEEDS_ROTATION.has(fixedSrc);
+
+    if (needsRotation) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(imgX, imgY, imgW, imgH);
+      ctx.clip();
+
+      const cx = imgX + imgW / 2;
+      const cy = imgY + imgH / 2;
+      ctx.translate(cx, cy);
+      ctx.rotate(Math.PI / 2);
+      ctx.scale(1.333, 1.333);
+
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+    } else {
+      const drawX = imgX + (imgW - drawW) / 2;
+      let drawY: number;
+      if (align === 'top') {
+        drawY = imgY;
+      } else if (align === 'bottom') {
+        drawY = imgY + imgH - drawH;
+      } else {
+        drawY = imgY + (imgH - drawH) / 2;
+      }
+
+      ctx.drawImage(img, drawX, drawY, drawW, drawH);
+    }
   }
 }
 
@@ -384,7 +401,7 @@ export async function captureRoom(
   const label = getRoomLabel(roomIndex);
   const isAttic = roomIndex === ATTIC_INDEX;
 
-  const gridW = 800;
+  const gridW = 1920;
   const roomCols = isAttic ? ATTIC_COLS : ROOM_COLS;
   const roomRows = isAttic ? ATTIC_ROWS : ROOM_ROWS;
   const gridH = gridW * (roomRows / roomCols);
@@ -421,7 +438,7 @@ export async function captureRoom(
 export async function captureHouse(rooms: PlacedFurniture[][]) {
   const { images, statIcons, favicon } = await loadAllImages(rooms);
 
-  const gridW = 480;
+  const gridW = 1200;
   const gridH = gridW * (ROOM_ROWS / ROOM_COLS);
   const statsBarH = 28;
   const houseSummaryH = 34;

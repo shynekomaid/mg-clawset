@@ -22,41 +22,41 @@ function computeTotals(placed: PlacedFurniture[]): Record<StatKey, number> {
 
 const rowBase: CSSProperties = {
   display: 'flex',
-  gap: 8,
-  padding: '4px 10px',
-  borderRadius: 8,
+  gap: 4,
+  padding: '2px 8px',
+  borderRadius: 6,
   alignItems: 'center',
   minWidth: 0,
-  transition: 'background 0.25s ease, border-color 0.25s ease, padding 0.25s ease, font-size 0.25s ease',
+  transition: 'background 0.25s ease, border-color 0.25s ease, padding 0.25s ease',
   flexWrap: 'wrap',
 };
 
 const statStyle: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 4,
-  fontSize: 12,
+  gap: 3,
+  fontSize: 11,
   fontFamily: 'var(--font)',
 };
 
 const valueStyle: CSSProperties = {
   fontWeight: 600,
-  fontSize: 13,
-  minWidth: 20,
+  fontSize: 12,
+  minWidth: 16,
   textAlign: 'center',
 };
 
 const labelStyle: CSSProperties = {
   fontSize: 11,
   fontWeight: 600,
-  minWidth: 52,
+  minWidth: 42,
   color: 'var(--text)',
   whiteSpace: 'nowrap',
 };
 
 const countStyle: CSSProperties = {
   color: 'var(--lavender-grey)',
-  fontSize: 11,
+  fontSize: 10,
   marginLeft: 'auto',
   whiteSpace: 'nowrap',
 };
@@ -77,7 +77,7 @@ function StatRow({ label, totals, count, active, highlight, onClick }: {
     <div
       style={{
         ...rowBase,
-        padding: active ? '8px 10px' : '4px 10px',
+        padding: active ? '5px 8px' : '2px 8px',
         background: active ? 'var(--accent-bg)' : highlight ? 'var(--social-bg)' : 'transparent',
         border: active ? '1px solid var(--accent)' : '1px solid transparent',
         cursor: onClick ? 'pointer' : undefined,
@@ -87,16 +87,12 @@ function StatRow({ label, totals, count, active, highlight, onClick }: {
       <span style={{
         ...labelStyle,
         color: active ? 'var(--accent)' : 'var(--text)',
-        fontSize: active ? 13 : 11,
-        transition: 'font-size 0.25s ease',
       }}>{label}</span>
       {STATS.map((s) => (
         <div key={s.key} style={statStyle}>
-          <StatIcon stat={s.key} size={active ? 16 : 14} />
+          <StatIcon stat={s.key} size={active ? 14 : 12} />
           <span style={{
             ...valueStyle,
-            fontSize: active ? 15 : 13,
-            transition: 'font-size 0.25s ease',
             color: valueColor(totals[s.key], s.key),
           }}>
             {totals[s.key]}
