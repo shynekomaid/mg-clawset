@@ -333,7 +333,7 @@ function MiniRoom({ roomIndex, placed, unlocked, onSelect, labelNumbers, hoverIt
           {labelNumbers && checklistOpen && [...placed].sort((a, b) => a.row - b.row || a.col - b.col).map((p) => {
             const n = labelNumbers[p.item.id];
             if (!n || hoverItemId === p.item.id) return null;
-            const { minR, maxR, minC, maxC } = getVisualBounds(p.item.shape);
+            const { minR, minC, maxC } = getVisualBounds(p.item.shape);
             const touchesCeiling = (p.row + minR) === 0;
             const touchesLeftWall = (p.col + minC) === 0;
             let labelLeft: string, labelTop: string;
