@@ -148,14 +148,6 @@ interface Props {
   allFurniture?: FurnitureItem[];
 }
 
-const ORD_SUFFIX = ['th', 'st', 'nd', 'rd'];
-
-function ordinal(n: number): string {
-  const v = n % 100;
-  const s = ORD_SUFFIX[(v - 20) % 10] || ORD_SUFFIX[v] || ORD_SUFFIX[0];
-  return `${n}${s}`;
-}
-
 export default function RoomStatsSummary({ rooms, activeRoom, onActiveRoomChange, ownership, isRoomUnlocked, roomWeights, roomFunctions, priorityOrder, allFurniture }: Props) {
   // House totals
   const houseTotals: Record<StatKey, number> = { appeal: 0, comfort: 0, stimulation: 0, health: 0, mutation: 0 };
