@@ -11,7 +11,7 @@ import AppHeader from './components/AppHeader';
 import WelcomeHero from './components/WelcomeHero';
 import BreedingGuide from './components/BreedingGuide';
 import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/anchorHelpers';
-import { autoPopulateRoomAsync, autoPopulateRoom, statScore } from './utils/autoPopulate';
+import { autoPopulateRoomAsync, autoPopulateRoom, statScore, preAllocateItems, pushScore, isConverged } from './utils/autoPopulate';
 import type { AlgorithmKey, RoomFillPlan } from './utils/autoPopulate';
 import type { AppView } from './components/AppHeader';
 import useIsMobile from './hooks/useIsMobile';
@@ -377,10 +377,12 @@ function App() {
   const handleAutoPopulate = useCallback(async (config: {
     algorithm: AlgorithmKey;
     plans: RoomFillPlan[];
-    /** Repeated passes until quality stalls (0 = infinite). */
-    keepSearching?: number;
+    /** 4-position mode: old=one-shot, standard/long/extreme=keep-searching. */
+    searchMode?: 'optimal' | 'standard' | 'long' | 'extreme';
+    /** Item ID → house-wide total cap (e.g. food box limit). */
+    itemCaps?: Record<string, number>;
   }) => {
-    const { algorithm, plans, keepSearching = 0 } = config;
+    const { algorithm, plans, searchMode } = config;
     if (plans.length === 0) return;
     const makeInstanceId = () => `placed-${nextInstanceId++}`;
     // theorycrafting without a savegame: the whole in-game catalog is available
@@ -429,19 +431,68 @@ function App() {
       }
     }
 
-    const fillPass = (seedBase: number) => {
+    // Reserve surplus copies of items that appear in mustInclude across multiple
+    // rooms. If 3 food boxes are owned but the cap is 2, 1 copy is reserved
+    // globally so the total placed across the house doesn't exceed the cap.
+    // Only applies to items with an explicit house-wide cap (itemCaps) — auto
+    // mode leaves them unrestricted.
+    const globalReserved: Record<string, number> = {};
+    if (config.itemCaps) {
+      for (const [id, cap] of Object.entries(config.itemCaps)) {
+        const totalOwned = effectiveOwnership[id] ?? 0;
+        if (totalOwned > cap) globalReserved[id] = totalOwned - cap;
+      }
+    }
+
+    // Cross-room pre-allocation: items whose stat score in one room is >2x the
+    // next best are assigned exclusively to that room. This prevents strongly
+    // biased items from being consumed by a wrong room in the fill order.
+    const preAllocated = preAllocateItems(plans, allFurniture, effectiveOwnership);
+
+    // Compute keep-searching behaviour from the mode.
+    // 'optimal' or undefined → one-shot fill (original behavior, single-room fallback).
+    type SearchParams = { staleLimit: number; temperature: boolean; permutations: boolean };
+    const searchParams: SearchParams | null = searchMode === 'extreme'
+      ? { staleLimit: 3, temperature: true, permutations: true }
+      : searchMode === 'long'
+      ? { staleLimit: 15, temperature: true, permutations: false }
+      : searchMode === 'standard'
+      ? { staleLimit: 5, temperature: false, permutations: false }
+      : null;
+
+    const fillPass = (seedBase: number, roomOrder: RoomFillPlan[] = plans) => {
       const newRooms = rooms.map((room, i) => (planned.has(i) ? [] : [...room]));
-      const used: Record<string, number> = { ...reserved };
+      const used: Record<string, number> = { ...reserved, ...globalReserved };
       let placedTotal = 0;
       let achievedScore = 0;
       let cellsUsed = 0;
-      for (const plan of plans) {
+      for (const plan of roomOrder) {
         // Items assigned to other rooms via mustInclude are off-limits here.
         const otherReserved: Record<string, number> = {};
         for (const [id, count] of Object.entries(mustIncludeReservation)) {
           const forThisRoom = plan.mustInclude.includes(id) ? 1 : 0;
           const remainingReservation = count - forThisRoom;
-          if (remainingReservation > 0) otherReserved[id] = effectiveOwnership[id] ?? 0;
+          if (remainingReservation > 0) otherReserved[id] = remainingReservation;
+        }
+
+        // Items pre-allocated to other rooms are off-limits here.
+        const otherPreAllocated: Record<string, number> = {};
+        for (const [ri, allocItems] of Object.entries(preAllocated)) {
+          const roomIdx = Number(ri);
+          if (roomIdx === plan.roomIndex) continue;
+          for (const [id, count] of Object.entries(allocItems)) {
+            otherPreAllocated[id] = (otherPreAllocated[id] || 0) + count;
+          }
+        }
+
+        // Merge all reservation layers. Use additive merge for preAllocated
+        // (distinct copies) and max for otherReserved (same copy counted once).
+        const merged: Record<string, number> = { ...used };
+        for (const [id, count] of Object.entries(otherReserved)) {
+          merged[id] = Math.max(merged[id] || 0, count);
+        }
+        for (const [id, count] of Object.entries(otherPreAllocated)) {
+          merged[id] = (merged[id] || 0) + count;
         }
 
         const result = autoPopulateRoom({
@@ -455,7 +506,7 @@ function App() {
           roomIndex: plan.roomIndex,
           allFurniture,
           ownership: effectiveOwnership,
-          usedInOtherRooms: { ...used, ...otherReserved },
+          usedInOtherRooms: merged,
           makeInstanceId,
         });
         newRooms[plan.roomIndex] = result;
@@ -478,36 +529,83 @@ function App() {
 
     setFillReport(null);
 
-    // --- Keep-searching: repeated passes until the user clicks "Use best". ---
-    if (keepSearching) {
+    // --- Keep-searching (searchMode set) vs. one-shot (single-room fill). ---
+    if (searchParams) {
+      const keepSearching = searchParams.staleLimit;
       stopSearchRef.current = false;
       setFillSearch({ passes: 0, bestScore: 0 });
-      let best: ReturnType<typeof fillPass> | null = null;
-      let passes = 0;
-      let stalePasses = 0;
+
+      // generatePermutations returns all 5! orderings of plans.
+      const generatePermutations = <T,>(arr: T[]): T[][] => {
+        if (arr.length <= 1) return [arr];
+        const result: T[][] = [];
+        for (let i = 0; i < arr.length; i++) {
+          const rest = generatePermutations(arr.filter((_, j) => j !== i));
+          for (const perm of rest) result.push([arr[i], ...perm]);
+        }
+        return result;
+      };
+
+      let bestGlobal: ReturnType<typeof fillPass> | null = null;
+      let totalPasses = 0;
+      let usedOrders = 1;
+      const orders = searchParams.permutations
+        ? generatePermutations(plans)
+        : [plans];
+
       try {
-        do {
-          const pass = fillPass(0x1234 + passes * 2654435761);
-          passes += 1;
-          if (pass.placedTotal > 0 && (best === null || pass.achievedScore > best.achievedScore)) {
-            best = pass;
-            stalePasses = 0;
-          } else if (keepSearching > 0) {
-            stalePasses += 1;
+        for (let oi = 0; oi < orders.length; oi++) {
+          if (stopSearchRef.current) break;
+          const order = orders[oi];
+          usedOrders = oi + 1;
+          let best: ReturnType<typeof fillPass> | null = null;
+          let stalePasses = 0;
+          const scoreWindow: number[] = [];
+
+          for (
+            let pi = 0;
+            !stopSearchRef.current && (keepSearching === 0 || stalePasses < keepSearching);
+            pi++
+          ) {
+            const pass = fillPass(0x1234 + totalPasses * 2654435761, order);
+            totalPasses += 1;
+
+            if (pass.placedTotal > 0 && (best === null || pass.achievedScore > best.achievedScore)) {
+              best = pass;
+              stalePasses = 0;
+            } else {
+              stalePasses += 1;
+            }
+
+            // Temperature check: if enabled, exit early when improvement stalls.
+            if (searchParams.temperature && best) {
+              pushScore(scoreWindow, best.achievedScore, 10);
+              if (scoreWindow.length >= 10 && isConverged(scoreWindow, 0.01)) {
+                break;
+              }
+            }
+
+            setFillSearch({ passes: totalPasses, bestScore: best?.achievedScore ?? 0 });
+            // yield to the event loop so the UI stays responsive
+            await new Promise((r) => setTimeout(r, 0));
           }
-          setFillSearch({ passes, bestScore: best?.achievedScore ?? 0 });
-          await new Promise((r) => setTimeout(r, 0));
-        } while (!stopSearchRef.current && (keepSearching === 0 || stalePasses < keepSearching));
+
+          // Track best across all orders
+          if (best && (bestGlobal === null || best.achievedScore > bestGlobal.achievedScore)) {
+            bestGlobal = best;
+          }
+        }
       } finally {
         setFillSearch(null);
       }
-      if (!best) {
+
+      if (!bestGlobal) {
         window.alert('Nothing to place: no owned furniture with remaining copies scores positively for the selected stats.');
         return;
       }
-      const stopReason = stalePasses >= keepSearching ? ` (stopped after ${stalePasses} stale)` : '';
-      updateRooms(best.newRooms);
-      setFillReport(`${reportFor(best.achievedScore, best.cellsUsed)} \u00b7 best of ${passes} passes${stopReason}`);
+      const orderLabel = searchParams.permutations ? ` \u00b7 ${usedOrders}/${orders.length} orders` : '';
+      updateRooms(bestGlobal.newRooms);
+      setFillReport(`${reportFor(bestGlobal.achievedScore, bestGlobal.cellsUsed)} \u00b7 best of ${totalPasses} passes${orderLabel}`);
       return;
     }
 
@@ -516,7 +614,7 @@ function App() {
     setFillProgress(0);
     try {
       const newRooms = rooms.map((room, i) => (planned.has(i) ? [] : [...room]));
-      const used: Record<string, number> = { ...reserved };
+      const used: Record<string, number> = { ...reserved, ...globalReserved };
       let placedTotal = 0;
       let achievedScore = 0;
       let cellsUsed = 0;
@@ -527,7 +625,11 @@ function App() {
         for (const [id, count] of Object.entries(mustIncludeReservation)) {
           const forThisRoom = plan.mustInclude.includes(id) ? 1 : 0;
           const remainingReservation = count - forThisRoom;
-          if (remainingReservation > 0) otherReserved[id] = effectiveOwnership[id] ?? 0;
+          if (remainingReservation > 0) otherReserved[id] = remainingReservation;
+        }
+        const merged: Record<string, number> = { ...used };
+        for (const [id, count] of Object.entries(otherReserved)) {
+          merged[id] = Math.max(merged[id] || 0, count);
         }
         const result = await autoPopulateRoomAsync({
           weights: plan.weights,
@@ -539,7 +641,7 @@ function App() {
           roomIndex: plan.roomIndex,
           allFurniture,
           ownership: effectiveOwnership,
-          usedInOtherRooms: { ...used, ...otherReserved },
+          usedInOtherRooms: merged,
           makeInstanceId,
         }, (p) => setFillProgress((pi + p.fraction) / plans.length));
         newRooms[plan.roomIndex] = result;
@@ -837,6 +939,7 @@ function App() {
             drawerOpen={drawerOpen}
             onToggleDrawer={() => setDrawerOpen((v) => !v)}
             isRoomUnlocked={isRoomUnlocked}
+            allFurniture={allFurniture}
             idols={idolItems}
             foodBox={foodBoxItem && (ownership[foodBoxItem.id] || 0) > 0 ? foodBoxItem : null}
             fillProgress={fillProgress}

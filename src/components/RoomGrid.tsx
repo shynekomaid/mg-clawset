@@ -13,6 +13,10 @@ function isIdol(item: FurnitureItem): boolean {
   return IDOL_RE.test(item.image_url);
 }
 
+function isFoodBox(item: FurnitureItem): boolean {
+  return item.image_url.includes('special_foodbox');
+}
+
 function getTopAnchorOffset(shape: number[][]): number {
   let offset = 0;
   for (const row of shape) {
@@ -606,6 +610,32 @@ const { minR, maxR, minC, maxC } = getVisualBounds(p.item.shape);
                 height: `${(1 / cfg.rows) * 100}%`,
                 background: 'rgba(255, 160, 0, 0.25)',
                 border: '1px solid rgba(255, 160, 0, 0.5)',
+                borderRadius: 2,
+                zIndex: 1,
+                pointerEvents: 'none',
+                boxSizing: 'border-box',
+              }} />
+            );
+          }),
+        ),
+      )}
+      {/* Food box cell overlays */}
+      {!expertView && placed.filter((p) => isFoodBox(p.item)).flatMap((p) =>
+        p.item.shape.flatMap((shapeRow, r) =>
+          shapeRow.map((t, c) => {
+            if (t !== 2 && t !== 3) return null;
+            const gr = p.row + r;
+            const gc = p.col + c;
+            if (gr < 0 || gr >= cfg.rows || gc < 0 || gc >= cfg.cols) return null;
+            return (
+              <div key={`food-${p.instanceId}-${r}-${c}`} style={{
+                position: 'absolute',
+                left: `${(gc / cfg.cols) * 100}%`,
+                top: `${(gr / cfg.rows) * 100}%`,
+                width: `${(1 / cfg.cols) * 100}%`,
+                height: `${(1 / cfg.rows) * 100}%`,
+                background: 'rgba(33, 150, 243, 0.25)',
+                border: '1px solid rgba(33, 150, 243, 0.5)',
                 borderRadius: 2,
                 zIndex: 1,
                 pointerEvents: 'none',

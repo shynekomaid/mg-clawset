@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo, useLayoutEffect } from 'react';
+import { useState, useRef, useMemo, useLayoutEffect, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import type { FurnitureItem, PlacedFurniture } from '../types/furniture';
 import RoomGrid from './RoomGrid';
@@ -24,6 +24,37 @@ type FillPresetKey = 'breeding' | 'ultrabreeding' | 'sterilebreed' | 'sterile' |
 
 const EMPTY_WEIGHTS: Record<StatKey, -2 | -1 | 0 | 1> = { appeal: 0, comfort: 0, stimulation: 0, health: 0, mutation: 0 };
 
+const WORKSPACE_STORAGE_KEY = 'clawset-designer-workspace';
+
+interface WorkspacePersistedState {
+  expertView: boolean;
+  presetKey: FillPresetKey | 'blank';
+  roomPresets: Record<number, FillPresetKey | 'custom' | 'skip'>;
+  roomWeights: Record<number, Record<StatKey, -2 | -1 | 0 | 1>>;
+  roomIdols: Record<number, string[]>;
+  roomFood: Record<number, 0 | 1 | -1>;
+  priorityOrder: number[];
+  statWeights: Record<StatKey, -2 | -1 | 0 | 1>;
+  includeFood: 0 | 1 | -1;
+  houseFoodLimit: number | 'auto';
+  searchMode?: 'optimal' | 'standard' | 'long' | 'extreme';
+  selectedIdols: string[];
+  excludedIdols: string[];
+  roomExcluded: Record<number, string[]>;
+}
+
+function loadWorkspaceState(): Partial<WorkspacePersistedState> {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Partial<WorkspacePersistedState>;
+  } catch { return {}; }
+}
+
+function saveWorkspaceState(state: WorkspacePersistedState): void {
+  localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(state));
+}
+
 const FILL_PRESETS: Record<FillPresetKey, {
   label: string;
   description: string;
@@ -32,6 +63,8 @@ const FILL_PRESETS: Record<FillPresetKey, {
   autoIdolKeys?: string[];
   /** Idol image_url keys to exclude from placements in rooms using this preset. */
   excludeIdolKeys?: string[];
+  /** Breeding presets default to no food boxes (cats don't eat). */
+  noFood?: true;
 }> = {
   breeding: {
     label: 'Breeding',
@@ -40,6 +73,7 @@ const FILL_PRESETS: Record<FillPresetKey, {
     minStats: { comfort: 4 },
     autoIdolKeys: ['stimulationidol'],
     excludeIdolKeys: ['suppressoridol', 'evolutionidol', 'fightidol'],
+    noFood: true,
   },
   ultrabreeding: {
     label: 'Ultrabreeding',
@@ -48,6 +82,7 @@ const FILL_PRESETS: Record<FillPresetKey, {
     minStats: { comfort: 2, health: 1 },
     autoIdolKeys: ['stimulationidol'],
     excludeIdolKeys: ['suppressoridol', 'evolutionidol', 'fightidol', 'healthidol'],
+    noFood: true,
   },
   sterilebreed: {
     label: 'Sterile Breeding',
@@ -56,39 +91,41 @@ const FILL_PRESETS: Record<FillPresetKey, {
     minStats: { comfort: 4 },
     autoIdolKeys: ['stimulationidol'],
     excludeIdolKeys: ['evolutionidol', 'suppressoridol', 'fightidol'],
+    noFood: true,
   },
   storage: {
     label: 'Storage',
     description: 'Maximizes health and comfort. Auto-includes the Suppressor (Chastity) and Health Idols; excludes the Fight Idol.',
-    tristate: { health: 1, comfort: 1 },
+    tristate: { health: 1, comfort: 1,  stimulation: -1 },
     autoIdolKeys: ['suppressoridol', 'healthidol'],
     excludeIdolKeys: ['fightidol'],
   },
   sterile: {
     label: 'Sterile Storage',
     description: 'Maximizes health and comfort with zero mutation tolerance — any mutation item is completely banned, never placed. Auto-includes Suppressor and Health Idols; excludes Fight and Evolution Idols.',
-    tristate: { health: 1, comfort: 1, mutation: -2 },
+    tristate: { health: 1, comfort: 1, mutation: -2,  stimulation: -1 },
     autoIdolKeys: ['suppressoridol', 'healthidol'],
     excludeIdolKeys: ['fightidol', 'evolutionidol'],
   },
   mutation: {
     label: 'Mutation',
-    description: 'Maximizes mutation and comfort; minimizes stimulation. Auto-includes the Evolution Idol; excludes Stimulation and Fight Idols.',
-    tristate: { mutation: 1, comfort: 1, stimulation: -1 },
+    description: 'Maximizes mutation; keeps comfort 4+ for cats. Minimizes stimulation. Auto-includes the Evolution Idol; excludes Stimulation and Fight Idols.',
+    tristate: { mutation: 1, stimulation: -1 },
+    minStats: { comfort: 8 },
     autoIdolKeys: ['evolutionidol'],
     excludeIdolKeys: ['stimulationidol', 'fightidol'],
   },
   fightclub: {
     label: 'Fight Club',
-    description: 'Minimizes comfort to encourage sparring for combat stats. Auto-includes the Chaos Idol (deadlier fights, double rewards); excludes Comfort and Suppressor (Chastity) Idols.',
-    tristate: { comfort: -1 },
+    description: 'Bans all comfort — only zero-comfort items allowed. Auto-includes the Chaos Idol (deadlier fights, double rewards); excludes Comfort and Suppressor (Chastity) Idols.',
+    tristate: { comfort: -2, stimulation: -1 },
     autoIdolKeys: ['fightidol'],
     excludeIdolKeys: ['comfortidol', 'suppressoridol'],
   },
   appeal: {
     label: 'Appeal',
     description: 'Maximizes appeal for stronger base-stat inheritance. Auto-includes the Appeal Idol; no idol exclusions.',
-    tristate: { appeal: 1 },
+    tristate: { appeal: 1,  stimulation: -2 },
     autoIdolKeys: ['appealidol'],
   },
   random: {
@@ -117,12 +154,16 @@ interface Props {
   onAutoPopulate: (config: {
     algorithm: AlgorithmKey;
     plans: RoomFillPlan[];
-    keepSearching?: number;
+    searchMode?: 'optimal' | 'standard' | 'long' | 'extreme';
+    /** Item ID → house-wide total cap (e.g. food box limit). */
+    itemCaps?: Record<string, number>;
   }) => void;
   ownership: Record<string, number>;
   drawerOpen: boolean;
   onToggleDrawer: () => void;
   isRoomUnlocked: (i: number) => boolean;
+  /** All furniture catalog — used for theoretical max stat calculations. */
+  allFurniture: FurnitureItem[];
   /** All special idols; unowned ones render disabled. */
   idols: FurnitureItem[];
   /** Owned food box item (null when none owned). */
@@ -145,44 +186,109 @@ interface Props {
 export default function RoomDesignerWorkspace({
   visible, placed, rooms, activeRoom, onActiveRoomChange,
   onPlace, onRemove, onMove, onImportRooms, onAutoPopulate, ownership,
-  drawerOpen, onToggleDrawer, isRoomUnlocked, idols, foodBox, fillProgress = null, fillReport = null,
+  drawerOpen, onToggleDrawer, isRoomUnlocked, allFurniture, idols, foodBox, fillProgress = null, fillReport = null,
   fillSearch = null, onStopSearch, onUndo, onRedo, onEmptyRooms,
 }: Props) {
-  const [expertView, setExpertView] = useState(false);
+  const persisted = useMemo(() => loadWorkspaceState(), []);
+
+  const [expertView, setExpertView] = useState(() => persisted.expertView ?? false);
   // single-room fill: a preset acts as an editable starting point. 'blank' =
   // start from zero. `presetModified` flags hand-edited stats so the label can
   // show "(modified)" while the preset's floor/idol still apply.
-  const [presetKey, setPresetKey] = useState<FillPresetKey | 'blank'>('breeding');
+  const [presetKey, setPresetKey] = useState<FillPresetKey | 'blank'>(() => persisted.presetKey ?? 'breeding');
   const [presetModified, setPresetModified] = useState(false);
   // house fill: independent preset per room
-  const [roomPresets, setRoomPresets] = useState<Record<number, FillPresetKey | 'custom' | 'skip'>>({});
+  const [roomPresets, setRoomPresets] = useState<Record<number, FillPresetKey | 'custom' | 'skip'>>(() => persisted.roomPresets ?? {});
   // per-room stat weights for rooms set to 'custom' in the house fill
-  const [roomWeights, setRoomWeights] = useState<Record<number, Record<StatKey, -2 | -1 | 0 | 1>>>({});
+  const [roomWeights, setRoomWeights] = useState<Record<number, Record<StatKey, -2 | -1 | 0 | 1>>>(() => persisted.roomWeights ?? {});
   // per-room idol picks for the house fill (in addition to a preset's auto-idol)
-  const [roomIdols, setRoomIdols] = useState<Record<number, Set<string>>>({});
+  const [roomIdols, setRoomIdols] = useState<Record<number, Set<string>>>(() => {
+    const raw = persisted.roomIdols;
+    if (!raw) return {};
+    const out: Record<number, Set<string>> = {};
+    for (const [k, v] of Object.entries(raw)) out[Number(k)] = new Set(v);
+    return out;
+  });
   // per-room "include a food box" toggle for the house fill
-  const [roomFood, setRoomFood] = useState<Record<number, 0 | 1 | -1>>({});
+  const [roomFood, setRoomFood] = useState<Record<number, 0 | 1 | -1>>(() => persisted.roomFood ?? {});
   // house fill room priority order (first = gets first pick of shared items)
-  const [priorityOrder, setPriorityOrder] = useState<number[]>([ATTIC_INDEX, 0, 1, 2, 3]);
+  const [priorityOrder, setPriorityOrder] = useState<number[]>(() => persisted.priorityOrder ?? [ATTIC_INDEX, 0, 1, 2, 3]);
   const [statWeights, setStatWeights] = useState<Record<StatKey, -2 | -1 | 0 | 1>>(
-    () => ({ ...EMPTY_WEIGHTS, ...FILL_PRESETS.breeding.tristate }),
+    () => persisted.statWeights ?? ({ ...EMPTY_WEIGHTS, ...FILL_PRESETS.breeding.tristate } as Record<StatKey, -2 | -1 | 0 | 1>),
   );
-  const [includeFood, setIncludeFood] = useState<0 | 1 | -1>(0);
+  const [includeFood, setIncludeFood] = useState<0 | 1 | -1>(() => persisted.includeFood ?? 0);
+  // House-wide limit on how many rooms can actually get a food box.
+  // 'auto' = respect per-room toggle without a hard cap; 0 = none; N = exactly N.
+  const maxFood = foodBox ? (ownership[foodBox.id] || 0) : 0;
+  const [houseFoodLimit, setHouseFoodLimit] = useState<number | 'auto'>(() => persisted.houseFoodLimit ?? 'auto');
   // Search is always the randomized "maximize" — fast enough that the old
   // Quick/Maximize choice wasn't worth a widget.
   const algorithm: AlgorithmKey = 'maximize';
-  const [staleLimit, setStaleLimit] = useState(99);
-  const [keepSearchingEnabled, setKeepSearchingEnabled] = useState(false);
+  const [searchMode, setSearchMode] = useState<'optimal' | 'standard' | 'long' | 'extreme'>(() => {
+    if (persisted.searchMode) return persisted.searchMode;
+    // Migration: if old keepSearching was enabled → 'long', else → 'optimal' (one-shot)
+    if ((persisted as Record<string, unknown>).keepSearchingEnabled) return 'long';
+    return 'optimal';
+  });
   // house two-pane: which room the detail drawer is editing (null = first)
   const [detailRoom, setDetailRoom] = useState<number | null>(null);
-  const [selectedIdols, setSelectedIdols] = useState<Set<string>>(() => new Set());
-  const [excludedIdols, setExcludedIdols] = useState<Set<string>>(() => new Set());
-  const [roomExcluded, setRoomExcluded] = useState<Record<number, Set<string>>>({});
+  const [selectedIdols, setSelectedIdols] = useState<Set<string>>(() => {
+    const raw = persisted.selectedIdols;
+    return raw ? new Set(raw) : new Set<string>();
+  });
+  const [excludedIdols, setExcludedIdols] = useState<Set<string>>(() => {
+    const raw = persisted.excludedIdols;
+    return raw ? new Set(raw) : new Set<string>();
+  });
+  const [roomExcluded, setRoomExcluded] = useState<Record<number, Set<string>>>(() => {
+    const raw = persisted.roomExcluded;
+    if (!raw) return {};
+    const out: Record<number, Set<string>> = {};
+    for (const [k, v] of Object.entries(raw)) out[Number(k)] = new Set(v);
+    return out;
+  });
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [hoverItem, setHoverItem] = useState<string | null>(null);
   const [connectorLines, setConnectorLines] = useState<{ x1: number; y1: number; x2: number; y2: number }[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const linkRootRef = useRef<HTMLDivElement>(null);
+
+  // Persist workspace inputs to localStorage on every change.
+  useEffect(() => {
+    saveWorkspaceState({
+      expertView,
+      presetKey,
+      roomPresets,
+      roomWeights,
+      roomIdols: Object.fromEntries(Object.entries(roomIdols).map(([k, v]) => [k, [...v]])),
+      roomFood,
+      priorityOrder,
+      statWeights,
+      includeFood,
+      houseFoodLimit,
+      searchMode,
+      selectedIdols: [...selectedIdols],
+      excludedIdols: [...excludedIdols],
+      roomExcluded: Object.fromEntries(Object.entries(roomExcluded).map(([k, v]) => [k, [...v]])),
+    });
+  }, [
+    expertView, presetKey, roomPresets, roomWeights, roomIdols, roomFood,
+    priorityOrder, statWeights, includeFood, houseFoodLimit, searchMode, selectedIdols, excludedIdols, roomExcluded,
+  ]);
+
+  // Sync the master preset with the room's personal template when opening a room.
+  useEffect(() => {
+    if (activeRoom === HOUSE_VIEW) return;
+    const rp = roomPresets[activeRoom];
+    if (rp === 'skip') { selectBlank(); return; }
+    if (rp && rp !== 'custom') { applyPreset(rp); return; }
+    if (rp === 'custom') {
+      setPresetKey('blank');
+      setPresetModified(true);
+      setStatWeights({ ...(roomWeights[activeRoom] ?? EMPTY_WEIGHTS) });
+      setSelectedIdols(new Set(roomIdols[activeRoom]));
+    }
+  }, [activeRoom]);
 
   // Thin connector lines from the hovered checklist row to every matching placed piece
   useLayoutEffect(() => {
@@ -237,6 +343,7 @@ export default function RoomDesignerWorkspace({
 
   // Load a preset as an editable starting point: its stats fill the chips and
   // its floor/idol travel with it (kept even after the user edits the stats).
+  // Also saves the preset choice to the current room's personal template.
   const applyPreset = (key: FillPresetKey) => {
     const preset = FILL_PRESETS[key];
     setPresetKey(key);
@@ -252,6 +359,9 @@ export default function RoomDesignerWorkspace({
       .filter((i): i is FurnitureItem => !!i)
       .map((i) => i.id) ?? [];
     setExcludedIdols(new Set(excludeIds));
+    if (activeRoom !== HOUSE_VIEW) {
+      setRoomPresets((prev) => ({ ...prev, [activeRoom]: key }));
+    }
   };
 
   // Start from zero: no stats, no floor.
@@ -413,14 +523,21 @@ export default function RoomDesignerWorkspace({
       const ib = priorityOrder.indexOf(b);
       return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
     });
+    let foodSlotsUsed = 0;
     for (const ri of orderedRooms) {
       const choice = roomChoice(ri);
       if (choice === 'skip') continue;
+      // Breeding presets default to no food boxes; explicit roomFood[ri] === 1 overrides.
+      const presetNoFood = choice !== 'custom' && FILL_PRESETS[choice].noFood && roomFood[ri] !== 1;
+      const wantsFood = roomFood[ri] === 1 && foodBox && !presetNoFood;
+      const foodCap = houseFoodLimit === 'auto' ? Infinity : houseFoodLimit;
+      const canHaveFood = wantsFood && foodSlotsUsed < foodCap;
+      if (wantsFood && canHaveFood) foodSlotsUsed++;
       const mustInclude = [
         ...roomIdolsFor(ri),
-        ...(roomFood[ri] === 1 && foodBox ? [foodBox.id] : []),
+        ...(canHaveFood ? [foodBox.id] : []),
       ];
-      const excludeFood = roomFood[ri] === -1 && foodBox ? [foodBox.id] : [];
+      const excludeFood = ((roomFood[ri] === -1 || presetNoFood) && foodBox) ? [foodBox.id] : [];
       if (choice === 'custom') {
         const w = roomWeightsFor(ri);
         const weights: StatWeights = Object.fromEntries(
@@ -454,6 +571,9 @@ export default function RoomDesignerWorkspace({
   };
 
   const handleAutoFill = () => {
+    const itemCaps = houseFoodLimit !== 'auto' && foodBox
+      ? { [foodBox.id]: houseFoodLimit }
+      : undefined;
     if (activeRoom === HOUSE_VIEW) {
       const plans = buildHousePlans();
       const replacing = plans.reduce((s, p) => s + rooms[p.roomIndex].length, 0);
@@ -463,7 +583,7 @@ export default function RoomDesignerWorkspace({
       ) {
         return;
       }
-      onAutoPopulate({ algorithm, plans, keepSearching: keepSearchingEnabled ? staleLimit : 0 });
+      onAutoPopulate({ algorithm, plans, searchMode, itemCaps });
       return;
     }
     const statText = ALL_STATS.filter((st) => statWeights[st] !== 0)
@@ -478,18 +598,20 @@ export default function RoomDesignerWorkspace({
     ) {
       return;
     }
+    const presetNoFood = presetKey !== 'blank' && FILL_PRESETS[presetKey].noFood && includeFood !== 1;
     const mustInclude = [
       ...idols.filter((i) => selectedIdols.has(i.id)).map((i) => i.id),
-      ...(includeFood === 1 && foodBox ? [foodBox.id] : []),
+      ...(includeFood === 1 && foodBox && !presetNoFood ? [foodBox.id] : []),
     ];
     const presetExcluded = presetKey !== 'blank' ? resolveExcludedIds(FILL_PRESETS[presetKey].excludeIdolKeys) : [];
     const userExcluded = idols.filter((i) => excludedIdols.has(i.id)).map((i) => i.id);
-    const foodExcluded = includeFood === -1 && foodBox ? [foodBox.id] : [];
+    const foodExcluded = ((includeFood === -1 || presetNoFood) && foodBox) ? [foodBox.id] : [];
     const excludeItemIds = [...new Set([...presetExcluded, ...userExcluded, ...foodExcluded])];
     onAutoPopulate({
       algorithm,
       plans: [{ roomIndex: activeRoom, weights: activeWeights, mustInclude, minStats, excludeItemIds }],
-      keepSearching: keepSearchingEnabled ? staleLimit : 0,
+      searchMode,
+      itemCaps,
     });
   };
 
@@ -791,36 +913,60 @@ export default function RoomDesignerWorkspace({
                 ⌂ House
               </button>
             )}
-            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)' }}>Auto-fill</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-h)' }}>
+              Auto-fill
+              {foodBox && (
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 400, color: 'var(--text-m)' }}>
+                  <select
+                    value={houseFoodLimit}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setHouseFoodLimit(v === 'auto' ? 'auto' : Math.max(0, Math.min(maxFood, parseInt(v) || 0)));
+                    }}
+                    style={{ width: 60, padding: '1px 3px', borderRadius: 3, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-h)', fontFamily: 'var(--font)', fontSize: 11 }}
+                  >
+                    <option value="auto">auto</option>
+                    <option value="0">ignore</option>
+                    {Array.from({ length: maxFood }, (_, i) => i + 1).map((n) => (
+                      <option key={n} value={n}>{n}</option>
+                    ))}
+                  </select>
+                  {' '}food box
+                </span>
+              )}
+            </span>
             <div style={{ flex: 1 }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-              <label
-                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}
-                title="When enabled, runs repeated passes until quality stalls for N passes"
-              >
-                <input
-                  type="checkbox"
-                  checked={keepSearchingEnabled}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+              {(['optimal', 'standard', 'long', 'extreme'] as const).map((mode) => (
+                <button
+                  key={mode}
                   disabled={fillProgress !== null || fillSearch !== null}
-                  onChange={(e) => setKeepSearchingEnabled(e.target.checked)}
-                />
-                Keep searching
-              </label>
-              <label
-                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: keepSearchingEnabled ? 'var(--text)' : 'var(--text-m)' }}
-                title={keepSearchingEnabled ? 'Stop after N passes without improvement (0 = infinite)' : 'Enable “Keep searching” first'}
-              >
-                <input
-                  type="number"
-                  min={0}
-                  max={9999}
-                  value={staleLimit}
-                  disabled={!keepSearchingEnabled || fillProgress !== null || fillSearch !== null}
-                  onChange={(e) => setStaleLimit(Math.max(0, parseInt(e.target.value) || 0))}
-                  style={{ width: 52, padding: '2px 4px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text-h)', fontFamily: 'var(--font)', fontSize: 12, textAlign: 'center', opacity: keepSearchingEnabled ? 1 : 0.5 }}
-                />
-                <span>stale limit</span>
-              </label>
+                  onClick={() => setSearchMode(mode)}
+                  title={
+                    mode === 'optimal'
+                      ? 'Original: single pass, deterministic'
+                      : mode === 'standard'
+                      ? 'Fast: 5 passes, fixed room order'
+                      : mode === 'long'
+                      ? 'Balanced: up to 15 passes, adaptive exit'
+                      : 'Thorough: all 120 room orders, best overall'
+                  }
+                  style={{
+                    fontSize: 11,
+                    padding: '3px 8px',
+                    borderRadius: 4,
+                    border: searchMode === mode ? '1px solid var(--accent)' : '1px solid var(--border)',
+                    background: searchMode === mode ? 'var(--accent-bg)' : 'var(--bg)',
+                    color: searchMode === mode ? 'var(--accent)' : 'var(--text-h)',
+                    fontWeight: searchMode === mode ? 600 : 400,
+                    cursor: 'pointer',
+                    fontFamily: 'var(--font)',
+                    opacity: fillProgress !== null || fillSearch !== null ? 0.6 : 1,
+                  }}
+                >
+                  {mode === 'optimal' ? '★ Optimal' : mode.charAt(0).toUpperCase() + mode.slice(1)}
+                </button>
+              ))}
             </div>
             {fillSearch !== null && (
               <button
@@ -846,7 +992,7 @@ export default function RoomDesignerWorkspace({
               }}
               disabled={!fillReady || fillProgress !== null || fillSearch !== null}
               onClick={handleAutoFill}
-              title={fillReady ? `Fill ${getRoomLabel(activeRoom)}` : 'Set at least one stat to maximize'}
+              title={fillReady ? 'Fill all rooms' : 'Set at least one stat to maximize'}
             >
               {fillProgress !== null && (
                 <span style={{
@@ -862,7 +1008,7 @@ export default function RoomDesignerWorkspace({
                 ? `Searching… best ${fillSearch.bestScore} · pass ${fillSearch.passes}`
                 : fillProgress !== null
                   ? `Optimizing … ${Math.round(fillProgress * 100)}%`
-                  : `Fill ${getRoomLabel(activeRoom)}`}
+                  : 'Fill'}
             </button>
           </div>
           {fillReport && fillProgress === null && fillSearch === null && (
@@ -1089,6 +1235,15 @@ export default function RoomDesignerWorkspace({
               onActiveRoomChange={onActiveRoomChange}
               ownership={ownership}
               isRoomUnlocked={isRoomUnlocked}
+              roomWeights={roomWeights}
+              allFurniture={allFurniture}
+              roomFunctions={Object.fromEntries(
+                [4, 0, 1, 2, 3].filter(i => i < rooms.length).map(i => {
+                  const choice = roomChoice(i);
+                  return [i, choice === 'custom' ? 'Custom' : choice !== 'skip' ? FILL_PRESETS[choice].label : ''];
+                })
+              )}
+              priorityOrder={priorityOrder}
             />
           </div>
         </div>

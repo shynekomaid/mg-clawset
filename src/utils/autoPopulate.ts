@@ -157,6 +157,10 @@ function fillGreedy(
   scan: ScanMode = { rowsReversed: false, colsReversed: false },
   minStats?: Partial<Record<StatKey, number>>,
   baseTotals?: Partial<Record<StatKey, number>>,
+  opts?: AutoPopulateOptions,
+  /** Counts of items already present on the occupancy grid (e.g. kept survivors
+   *  in ruin-and-recreate). Phase 6 uses this to avoid placing extra copies. */
+  extraPresent?: Record<string, number>,
 ): PlacedFurniture[] {
   // Scan offsets extended so anchor cells (which may hang outside the solid
   // bounding box) can reach floor/ceiling anchor rows.
@@ -306,6 +310,87 @@ function fillGreedy(
       || a.item.name.localeCompare(b.item.name));
   fillLoop(fillers);
 
+  // Phase 5: squeeze pass — try remaining items smallest-first to fill leftover
+  // gaps that larger neutral fillers couldn't reach (e.g. single-cell gaps).
+  const squeezers = candidates
+    .filter((c) => c.remaining > 0 && c.score >= 0)
+    .sort((a, b) =>
+      a.item.spacesOccupied - b.item.spacesOccupied
+      || b.score - a.score);
+  fillLoop(squeezers);
+
+  // Phase 6: last chance — try EVERY remaining owned item regardless of score,
+  // largest first. This catches:
+  //   - Large items with low score-per-cell that lost the Phase 3 race (TVs)
+  //   - Decorations filtered by negative score (balloons, hanging items)
+  //   - Any leftover copies that couldn't find a spot earlier
+  // Items that break minStats floors are still blocked by wouldBreakFloor.
+  // Skipped when noFillers is set (user explicitly opted out of filler placement).
+  if (opts && !opts.noFillers) {
+    const placedHere = new Map<string, number>();
+    for (const p of placed) placedHere.set(p.item.id, (placedHere.get(p.item.id) ?? 0) + 1);
+    const exclusions = new Set(opts.excludeItemIds ?? []);
+    const mandatoryIds = new Set(opts.mustInclude ?? []);
+    const lastPool: Candidate[] = [];
+    for (const item of opts.allFurniture) {
+      if (exclusions.has(item.id) && !mandatoryIds.has(item.id)) continue;
+      const remaining = (opts.ownership[item.id] ?? 0) - (opts.usedInOtherRooms[item.id] ?? 0) - (placedHere.get(item.id) ?? 0) - (extraPresent?.[item.id] ?? 0);
+      if (remaining <= 0) continue;
+      // Skip items excluded by banned stats (-2) unless mandatory.
+      const bannedStats = Object.entries(opts.weights).filter(([, w]) => w === -2).map(([stat]) => stat as StatKey);
+      if (bannedStats.some((st) => item[st] > 0) && !mandatoryIds.has(item.id)) continue;
+      lastPool.push({
+        item,
+        score: statScore(item, opts.weights),
+        remaining,
+        mandatory: false,
+      });
+    }
+    lastPool.sort((a, b) =>
+      b.item.spacesOccupied - a.item.spacesOccupied
+      || b.score - a.score
+      || a.item.name.localeCompare(b.item.name));
+    fillLoop(lastPool);
+
+    // Phase 7: dumb single pass — try every remaining item once, in catalog
+    // order, without restarts or failed tracking. If it finds a spot it's
+    // placed; if not we move on. This catches items that Phase 6's size-
+    // sorted loop kept re-prioritising past.
+    const dumpPool: Candidate[] = [];
+    for (const item of opts.allFurniture) {
+      if (exclusions.has(item.id) && !mandatoryIds.has(item.id)) continue;
+      const remaining = (opts.ownership[item.id] ?? 0) - (opts.usedInOtherRooms[item.id] ?? 0) - (placedHere.get(item.id) ?? 0) - (extraPresent?.[item.id] ?? 0);
+      if (remaining <= 0) continue;
+      const bannedStats = Object.entries(opts.weights).filter(([, w]) => w === -2).map(([stat]) => stat as StatKey);
+      if (bannedStats.some((st) => item[st] > 0) && !mandatoryIds.has(item.id)) continue;
+      dumpPool.push({
+        item,
+        score: statScore(item, opts.weights),
+        remaining,
+        mandatory: false,
+      });
+    }
+    for (const cand of dumpPool) {
+      if (cand.remaining <= 0) continue;
+      if (wouldBreakFloor(cand)) {
+        addHeadroomFor(cand);
+        if (wouldBreakFloor(cand)) continue;
+      }
+      const spot = findSpot(cand.item);
+      if (!spot) continue;
+      const piece: PlacedFurniture = {
+        instanceId: makeInstanceId(),
+        item: cand.item,
+        row: spot.row,
+        col: spot.col,
+      };
+      placed.push(piece);
+      applyPlacement(piece);
+      cand.remaining -= 1;
+      for (const st of Object.keys(totals) as StatKey[]) totals[st] += cand.item[st];
+    }
+  }
+
   return placed;
 }
 
@@ -320,7 +405,7 @@ function runGreedy(opts: AutoPopulateOptions, cfg: RoomConfig, rng?: Rng, scan?:
   sortCandidates(candidates, rng, mode);
   const occupancy = buildOccupancy([], cfg);
   const anchorPoints = buildAnchorPointSet([], cfg);
-  return fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId, scan, opts.minStats);
+  return fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId, scan, opts.minStats, undefined, opts);
 }
 
 /**
@@ -337,7 +422,12 @@ function ruinAndRecreate(
   let kept = [...layout];
   const removeCount = Math.max(1, Math.floor(layout.length * ratio));
   for (let i = 0; i < removeCount && kept.length > 0; i++) {
-    const victim = kept[Math.floor(rng() * kept.length)];
+    // 50% chance: bias victim selection toward anchor-providing pieces (type-3
+    // cells in shape) so we remove full anchor clusters (shelf + hanging items).
+    // This opens up larger contiguous gaps for the refill to explore.
+    const anchorProviders = kept.filter(p => p.item.shape.some(r => r.some(c => c === 3)));
+    const pool = (anchorProviders.length > 0 && rng() < 0.5) ? anchorProviders : kept;
+    const victim = pool[Math.floor(rng() * pool.length)];
     const cascade = findAnchoredPieces(victim.instanceId, kept, cfg);
     const gone = new Set([victim.instanceId, ...cascade]);
     kept = kept.filter((p) => !gone.has(p.instanceId));
@@ -358,7 +448,7 @@ function ruinAndRecreate(
 
   const occupancy = buildOccupancy(kept, cfg);
   const anchorPoints = buildAnchorPointSet(kept, cfg);
-  const added = fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId, undefined, opts.minStats, keptTotals);
+  const added = fillGreedy(candidates, occupancy, anchorPoints, cfg, opts.makeInstanceId, undefined, opts.minStats, keptTotals, opts, keptCounts);
   return [...kept, ...added];
 }
 
@@ -386,10 +476,11 @@ function maximizeRound(state: MaximizeState, opts: AutoPopulateOptions, cfg: Roo
   const { rng } = state;
   const consider = (layout: PlacedFurniture[]) => {
     const score = totalScore(layout, opts.weights);
+    const coverage = cellsUsed(layout);
     if (
-      score > state.bestScore
-      || (score === state.bestScore && cellsUsed(layout) > cellsUsed(state.best))
-      || (score === state.bestScore && cellsUsed(layout) === cellsUsed(state.best) && layout.length > state.best.length)
+      score > state.bestScore + 5                           // clearly better score
+      || (score >= state.bestScore - 5 && coverage > cellsUsed(state.best))  // comparable score → fill more cells
+      || (score >= state.bestScore - 5 && coverage === cellsUsed(state.best) && layout.length > state.best.length)
     ) {
       state.best = layout;
       state.bestScore = score;
@@ -413,6 +504,74 @@ function runMaximize(opts: AutoPopulateOptions, cfg: RoomConfig): PlacedFurnitur
     maximizeRound(state, opts, cfg);
   } while (opts.iterations !== undefined ? state.round < opts.iterations : Date.now() < deadline);
   return state.best;
+}
+
+/**
+ * Maintain a sliding window of recent scores.
+ * Returns a new array (does not mutate `window`).
+ */
+export function pushScore(window: number[], score: number, maxLen: number): number[] {
+  const next = [...window, score];
+  return next.length > maxLen ? next.slice(next.length - maxLen) : next;
+}
+
+/**
+ * Returns true when the score window has converged — the relative range
+ * (max - min) / max is below `threshold`. A window with fewer than 2 entries
+ * is never considered converged. An all-zero window is converged (nothing is
+ * improving).
+ */
+export function isConverged(scoreWindow: number[], threshold: number): boolean {
+  if (scoreWindow.length < 2) return false;
+  const max = Math.max(...scoreWindow);
+  if (max === 0) return true;
+  const min = Math.min(...scoreWindow);
+  return (max - min) / max < threshold;
+}
+
+/**
+ * Pre-allocate items to rooms for cross-room optimisation.
+ * Items with a clear best room (statScore >2× the next best) are assigned
+ * to that room exclusively. Items in mustInclude are skipped (handled by
+ * the existing reservation system). Items with close or zero scores remain
+ * in the shared pool (current behaviour).
+ */
+export function preAllocateItems(
+  plans: RoomFillPlan[],
+  allFurniture: FurnitureItem[],
+  ownership: Record<string, number>,
+): Record<number, Record<string, number>> {
+  const alloc: Record<number, Record<string, number>> = {};
+  for (const plan of plans) alloc[plan.roomIndex] = {};
+
+  for (const item of allFurniture) {
+    const owned = ownership[item.id] ?? 0;
+    if (owned <= 0) continue;
+    // Items in mustInclude are handled by the existing reservation system
+    if (plans.some(p => p.mustInclude.includes(item.id))) continue;
+
+    const scores = plans.map(p => ({
+      roomIndex: p.roomIndex,
+      score: statScore(item, p.weights),
+    }));
+
+    const positive = scores.filter(s => s.score > 0);
+
+    if (positive.length === 1) {
+      alloc[positive[0].roomIndex][item.id] = owned;
+      continue;
+    }
+
+    if (positive.length > 1) {
+      const sorted = [...positive].sort((a, b) => b.score - a.score);
+      if (sorted[0].score > sorted[1].score * 2) {
+        alloc[sorted[0].roomIndex][item.id] = owned;
+        continue;
+      }
+    }
+  }
+
+  return alloc;
 }
 
 export function autoPopulateRoom(opts: AutoPopulateOptions): PlacedFurniture[] {
