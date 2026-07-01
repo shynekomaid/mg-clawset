@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import type { Filters, SortConfig, SortField, FurnitureItem, RawFurnitureItem, PlacedFurniture, StatKey } from './types/furniture';
+import type { Filters, SortConfig, SortField, FurnitureItem, RawFurnitureItem, PlacedFurniture } from './types/furniture';
 import { getRoomConfig, ATTIC_INDEX, HOUSE_VIEW } from './types/furniture';
 import furnitureData from './data/furniture_data.json';
 import SplitScreenContainer from './components/SplitScreenContainer';
@@ -13,7 +13,7 @@ import WelcomeHero from './components/WelcomeHero';
 import BreedingGuide from './components/BreedingGuide';
 import { findAllAnchored, findAnchoredPieces, wouldCollide } from './utils/anchorHelpers';
 import { autoPopulateRoomAsync, autoPopulateRoom, statScore, preAllocateItems, pushScore, isConverged } from './utils/autoPopulate';
-import type { AlgorithmKey, StatWeights, RoomFillPlan } from './utils/autoPopulate';
+import type { AlgorithmKey, RoomFillPlan } from './utils/autoPopulate';
 import type { AppView } from './components/AppHeader';
 import useIsMobile from './hooks/useIsMobile';
 import { parseSavegame } from './utils/savegame';
@@ -213,7 +213,11 @@ function App() {
   const [fillSearch, setFillSearch] = useState<{ passes: number; bestScore: number } | null>(null);
   // flipped by "Use best result" to stop the keep-searching loop
   const stopSearchRef = useRef(false);
-  const stopSearch = useCallback(() => { stopSearchRef.current = true; }, []);
+  const fillAbortRef = useRef<AbortController | null>(null);
+  const stopSearch = useCallback(() => {
+    stopSearchRef.current = true;
+    fillAbortRef.current?.abort();
+  }, []);
   const pendingTestPlansRef = useRef<RoomFillPlan[] | null>(null);
   const [view, setView] = useState<AppView>('house');
 
@@ -382,11 +386,13 @@ function App() {
     algorithm: AlgorithmKey;
     plans: RoomFillPlan[];
     /** 4-position mode: old=one-shot, standard/long/extreme=keep-searching. */
-    searchMode?: 'optimal' | 'standard' | 'long' | 'extreme';
+    searchMode?: 'fast' | 'medium' | 'long' | 'extraLong';
     /** Item ID → house-wide total cap (e.g. food box limit). */
     itemCaps?: Record<string, number>;
+    /** V2 tunable settings; ignored by v1. */
+    v2Settings?: import('./utils/autoPopulateV2').V2Settings;
   }) => {
-    const { algorithm, plans, searchMode } = config;
+    const { algorithm, plans, searchMode, v2Settings } = config;
     if (plans.length === 0) return;
     const makeInstanceId = () => `placed-${nextInstanceId++}`;
     // theorycrafting without a savegame: use zero copies (no items to place)
@@ -454,17 +460,20 @@ function App() {
     const preAllocated = preAllocateItems(plans, allFurniture, effectiveOwnership);
 
     // Compute keep-searching behaviour from the mode.
-    // 'optimal' or undefined → one-shot fill (original behavior, single-room fallback).
+    // 'fast' or undefined → one-shot fill (original behavior, single-room fallback).
     type SearchParams = { staleLimit: number; temperature: boolean; permutations: boolean };
-    const searchParams: SearchParams | null = searchMode === 'extreme'
+    let searchParams: SearchParams | null = searchMode === 'extraLong'
       ? { staleLimit: 3, temperature: true, permutations: true }
       : searchMode === 'long'
       ? { staleLimit: 15, temperature: true, permutations: false }
-      : searchMode === 'standard'
+      : searchMode === 'medium'
       ? { staleLimit: 5, temperature: false, permutations: false }
       : null;
 
-    const fillPass = (seedBase: number, roomOrder: RoomFillPlan[] = plans) => {
+    // v2 uses one-shot with iterations from user settings; no keep-searching needed.
+    if (algorithm === 'maximize-v2') searchParams = null;
+
+    const fillPass = async (seedBase: number, roomOrder: RoomFillPlan[] = plans) => {
       const newRooms = rooms.map((room, i) => (planned.has(i) ? [] : [...room]));
       const used: Record<string, number> = { ...reserved, ...globalReserved };
       let placedTotal = 0;
@@ -499,20 +508,29 @@ function App() {
           merged[id] = (merged[id] || 0) + count;
         }
 
-        const result = autoPopulateRoom({
+        const opts = {
           weights: plan.weights,
           minStats: plan.minStats,
           mustInclude: plan.mustInclude,
           excludeItemIds: plan.excludeItemIds,
           algorithm,
-          iterations: algorithm === 'maximize' ? KEEP_PASS_ITERATIONS : undefined,
           seed: seedBase + plan.roomIndex * 7919,
           roomIndex: plan.roomIndex,
           allFurniture,
           ownership: effectiveOwnership,
           usedInOtherRooms: merged,
           makeInstanceId,
-        });
+          v2Settings,
+        };
+
+        // Yield between rooms so the browser stays responsive during
+        // multi-room passes (especially v2 which can take ~1s per room).
+        if (placedTotal > 0) await new Promise((r) => setTimeout(r, 0));
+
+        const result = algorithm === 'maximize-v2'
+          ? await autoPopulateRoomAsync({ ...opts, iterations: KEEP_PASS_ITERATIONS })
+          : autoPopulateRoom(opts);
+
         newRooms[plan.roomIndex] = result;
         placedTotal += result.length;
         for (const p of result) {
@@ -550,7 +568,7 @@ function App() {
         return result;
       };
 
-      let bestGlobal: ReturnType<typeof fillPass> | null = null;
+      let bestGlobal: Awaited<ReturnType<typeof fillPass>> | null = null;
       let totalPasses = 0;
       let usedOrders = 1;
       const orders = searchParams.permutations
@@ -562,7 +580,7 @@ function App() {
           if (stopSearchRef.current) break;
           const order = orders[oi];
           usedOrders = oi + 1;
-          let best: ReturnType<typeof fillPass> | null = null;
+          let best: Awaited<ReturnType<typeof fillPass>> | null = null;
           let stalePasses = 0;
           const scoreWindow: number[] = [];
 
@@ -571,7 +589,7 @@ function App() {
             !stopSearchRef.current && (keepSearching === 0 || stalePasses < keepSearching);
             pi++
           ) {
-            const pass = fillPass(0x1234 + totalPasses * 2654435761, order);
+            const pass = await fillPass(0x1234 + totalPasses * 2654435761, order);
             totalPasses += 1;
 
             if (pass.placedTotal > 0 && (best === null || pass.achievedScore > best.achievedScore)) {
@@ -615,6 +633,9 @@ function App() {
 
     // --- One-shot fill with the live progress bar (default behavior). ---
     const budgetMs = algorithm === 'maximize' ? 1500 : undefined;
+    stopSearchRef.current = false;
+    const controller = new AbortController();
+    fillAbortRef.current = controller;
     setFillProgress(0);
     try {
       const newRooms = rooms.map((room, i) => (planned.has(i) ? [] : [...room]));
@@ -623,6 +644,7 @@ function App() {
       let achievedScore = 0;
       let cellsUsed = 0;
       for (let pi = 0; pi < plans.length; pi++) {
+        if (stopSearchRef.current) break;
         const plan = plans[pi];
         // Other rooms' mustInclude items are reserved (see fillPass comment).
         const otherReserved: Record<string, number> = {};
@@ -642,11 +664,14 @@ function App() {
           excludeItemIds: plan.excludeItemIds,
           algorithm,
           budgetMs,
+          iterations: v2Settings?.defaultMaximizeIterations ?? 100,
           roomIndex: plan.roomIndex,
           allFurniture,
           ownership: effectiveOwnership,
           usedInOtherRooms: merged,
           makeInstanceId,
+          v2Settings,
+          signal: controller.signal,
         }, (p) => setFillProgress((pi + p.fraction) / plans.length));
         newRooms[plan.roomIndex] = result;
         placedTotal += result.length;
@@ -663,6 +688,7 @@ function App() {
       updateRooms(newRooms);
       setFillReport(reportFor(achievedScore, cellsUsed));
     } finally {
+      fillAbortRef.current = null;
       setFillProgress(null);
     }
   }, [rooms, ownership, hasOwnership, updateRooms]);
@@ -674,7 +700,7 @@ function App() {
     if (!pendingTestPlansRef.current) return;
     const plans = pendingTestPlansRef.current;
     pendingTestPlansRef.current = null;
-    autoFillRef.current({ algorithm: 'maximize', plans, searchMode: 'optimal' });
+      autoFillRef.current({ algorithm: 'maximize', plans, searchMode: 'fast' });
   }, [testModeNonce]);
 
   const handleSortChange = useCallback((field: SortField) => {
@@ -801,25 +827,6 @@ function App() {
       if (!(4 in pattern)) (ws.roomPresets as Record<string, string>)['4'] = 'skip';
       localStorage.setItem('clawset-designer-workspace', JSON.stringify(ws));
     } catch { /* best-effort */ }
-
-    const PRESET_PLAN: Record<string, { weights: StatWeights; minStats?: Partial<Record<StatKey, number>> }> = {
-      breeding: { weights: { stimulation: 1 } as StatWeights, minStats: { comfort: 4 } },
-      storage: { weights: { health: 1, comfort: 1, stimulation: -1 } as StatWeights },
-      fightclub: { weights: { comfort: -2, stimulation: -1 } as StatWeights },
-      mutation: { weights: { mutation: 1, stimulation: -1 } as StatWeights },
-    };
-    const roomPlans: RoomFillPlan[] = [];
-    const roomOrder = [4, 0, 1, 2, 3];
-    for (const ri of roomOrder) {
-      const presetName = pattern[ri];
-      if (!presetName) continue;
-      const cfg = PRESET_PLAN[presetName];
-      if (!cfg) continue;
-      const mustInclude: string[] = [];
-      if (foodBoxItem && presetName === 'storage') mustInclude.push(foodBoxItem.id);
-      roomPlans.push({ roomIndex: ri, weights: cfg.weights, minStats: cfg.minStats, mustInclude });
-    }
-    pendingTestPlansRef.current = roomPlans;
 
     setTestModeNonce((v) => v + 1);
     setTestModalOpen(false);

@@ -2,8 +2,9 @@ import type { FurnitureItem, PlacedFurniture, RoomConfig, StatKey } from '../typ
 import { getRoomConfig } from '../types/furniture';
 import { buildOccupancy, buildAnchorPointSet, canPlace } from './gridHelpers';
 import { findAnchoredPieces } from './anchorHelpers';
+import { autoPopulateRoomV2, autoPopulateRoomV2Async } from './autoPopulateV2';
 
-export type AlgorithmKey = 'greedy' | 'maximize';
+export type AlgorithmKey = 'greedy' | 'maximize' | 'maximize-v2';
 
 export const ALL_STATS: StatKey[] = ['appeal', 'comfort', 'stimulation', 'health', 'mutation'];
 
@@ -18,6 +19,7 @@ export const STAT_LABELS: Record<StatKey, string> = {
 export const ALGORITHMS: Record<AlgorithmKey, { label: string; description: string }> = {
   greedy: { label: 'Quick', description: 'Deterministic greedy fill — instant, same result every time' },
   maximize: { label: 'Maximize', description: 'Randomized search — tries many layouts, keeps the best (~0.5s)' },
+  'maximize-v2': { label: 'Fill v2', description: 'Enablement-aware algorithm — fills hollow interiors, best-fit placement, targeted search (quality-first)' },
 };
 
 export type StatWeights = Partial<Record<StatKey, number>>;
@@ -51,6 +53,10 @@ export interface AutoPopulateOptions {
   noFillers?: boolean;
   /** Item ids to exclude from ANY placement in this room (e.g. suppressor idols in Breeding). */
   excludeItemIds?: string[];
+  /** V2 tunable settings; ignored by v1. */
+  v2Settings?: import('./autoPopulateV2').V2Settings;
+  /** AbortSignal to cancel an in-progress room fill mid-search. */
+  signal?: AbortSignal;
 }
 
 /** One room's share of an auto-fill request (house fills carry one per room). */
@@ -577,6 +583,7 @@ export function preAllocateItems(
 export function autoPopulateRoom(opts: AutoPopulateOptions): PlacedFurniture[] {
   const cfg = getRoomConfig(opts.roomIndex);
   if (opts.algorithm === 'maximize') return runMaximize(opts, cfg);
+  if (opts.algorithm === 'maximize-v2') return autoPopulateRoomV2(opts as Parameters<typeof autoPopulateRoomV2>[0]);
   return runGreedy(opts, cfg);
 }
 
@@ -589,6 +596,9 @@ export async function autoPopulateRoomAsync(
   onProgress?: (p: FillProgress) => void,
 ): Promise<PlacedFurniture[]> {
   const cfg = getRoomConfig(opts.roomIndex);
+  if (opts.algorithm === 'maximize-v2') {
+    return autoPopulateRoomV2Async(opts as Parameters<typeof autoPopulateRoomV2Async>[0], onProgress);
+  }
   if (opts.algorithm !== 'maximize') {
     const result = runGreedy(opts, cfg);
     onProgress?.({ fraction: 1, bestScore: totalScore(result, opts.weights), pieces: result.length });
@@ -608,6 +618,7 @@ export async function autoPopulateRoomAsync(
     if (opts.iterations !== undefined ? state.round >= opts.iterations : now >= start + budget) break;
     if (now - lastYield >= 40) {
       onProgress?.({ fraction, bestScore: state.bestScore, pieces: state.best.length });
+      if (opts.signal?.aborted) break;
       await new Promise((r) => setTimeout(r, 0));
       lastYield = Date.now();
     }
