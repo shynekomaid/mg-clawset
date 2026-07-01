@@ -29,6 +29,8 @@ export interface V2Settings {
   sortScoreWeight: number;
   sortEfficiencyWeight: number;
   sortLegoBonus: number;
+  /** Positive = prioritise large items (more tiles) over small ones; negative = prioritise small items. */
+  sortSizeWeight: number;
   bestFitCornerWeight: number;
   bestFitEdgeWeight: number;
   bestFitAnchorExposureWeight: number;
@@ -46,11 +48,12 @@ export interface V2Settings {
 }
 
 export const DEFAULT_V2_SETTINGS: V2Settings = {
-  sortEnablementWeight: 0.20,
-  sortIrregularityWeight: 0.15,
-  sortScoreWeight: 0.62,
-  sortEfficiencyWeight: 0.15,
-  sortLegoBonus: 0.15,
+  sortEnablementWeight: 0.12,
+  sortIrregularityWeight: 0.12,
+  sortScoreWeight: 0.72,
+  sortEfficiencyWeight: 0.56,
+  sortLegoBonus: 0.12,
+  sortSizeWeight: -0.5,
   bestFitCornerWeight: 2.0,
   bestFitEdgeWeight: 1.5,
   bestFitAnchorExposureWeight: 1.0,
@@ -446,6 +449,7 @@ function sortCandidatesV2(candidates: Candidate[], rng?: Rng): void {
   let minIrr = Infinity, maxIrr = -Infinity;
   let minScore = Infinity, maxScore = -Infinity;
   let minEff = Infinity, maxEff = -Infinity;
+  let minSize = Infinity, maxSize = -Infinity;
 
   for (const c of candidates) {
     const prof = c.profile;
@@ -458,12 +462,15 @@ function sortCandidatesV2(candidates: Candidate[], rng?: Rng): void {
     const efficiency = c.score / Math.max(1, c.item.spacesOccupied);
     if (efficiency < minEff) minEff = efficiency;
     if (efficiency > maxEff) maxEff = efficiency;
+    if (c.item.spacesOccupied < minSize) minSize = c.item.spacesOccupied;
+    if (c.item.spacesOccupied > maxSize) maxSize = c.item.spacesOccupied;
   }
 
   const rangeEna = maxEna - minEna || 1;
   const rangeIrr = maxIrr - minIrr || 1;
   const rangeScore = maxScore - minScore || 1;
   const rangeEff = maxEff - minEff || 1;
+  const rangeSize = maxSize - minSize || 1;
 
   const jitter = new Map<string, number>();
   if (rng) {
@@ -496,11 +503,15 @@ function sortCandidatesV2(candidates: Candidate[], rng?: Rng): void {
     const effA = (a.score / Math.max(1, a.item.spacesOccupied) - minEff) / rangeEff * (jitter.get(a.item.id) ?? 1);
     const effB = (b.score / Math.max(1, b.item.spacesOccupied) - minEff) / rangeEff * (jitter.get(b.item.id) ?? 1);
 
+    const sizeNormA = (a.item.spacesOccupied - minSize) / rangeSize;
+    const sizeNormB = (b.item.spacesOccupied - minSize) / rangeSize;
+
     const keyA = (pA.isLego ? currentSettings.sortLegoBonus : 0)
       + currentSettings.sortEnablementWeight * enaNormA
       + currentSettings.sortIrregularityWeight * irrNormA
       + currentSettings.sortScoreWeight * scoreNormA
       + currentSettings.sortEfficiencyWeight * effA
+      + currentSettings.sortSizeWeight * sizeNormA
       + (tempNoise.get(a.item.id) ?? 0);
 
     const keyB = (pB.isLego ? currentSettings.sortLegoBonus : 0)
@@ -508,6 +519,7 @@ function sortCandidatesV2(candidates: Candidate[], rng?: Rng): void {
       + currentSettings.sortIrregularityWeight * irrNormB
       + currentSettings.sortScoreWeight * scoreNormB
       + currentSettings.sortEfficiencyWeight * effB
+      + currentSettings.sortSizeWeight * sizeNormB
       + (tempNoise.get(b.item.id) ?? 0);
 
     return keyB - keyA || a.item.name.localeCompare(b.item.name);

@@ -68,7 +68,7 @@ function buildShapeTypeGrid(placed: PlacedFurniture[], cfg: RoomConfig): (number
     for (let r = 0; r < shape.length; r++) {
       for (let c = 0; c < shape[r].length; c++) {
         const cellType = shape[r][c];
-        if (cellType !== 1 && cellType !== 4) {
+        if (cellType !== 1) {
           const gr = p.row + r;
           const gc = p.col + c;
           if (gr >= 0 && gr < cfg.rows && gc >= 0 && gc < cfg.cols) {
