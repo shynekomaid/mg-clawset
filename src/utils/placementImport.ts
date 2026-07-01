@@ -29,8 +29,11 @@ const anchorDir = (shape: number[][]): 'below' | 'above' | 'none' => {
   if (anc.length === 0) return 'none';
   const maxS = Math.max(...sol.map(([r]) => r));
   const minS = Math.min(...sol.map(([r]) => r));
-  if (anc.every(([r]) => r > maxS)) return 'below';
+  // Check 'above' first: all anchors above solids → hanging/ceiling item
   if (anc.every(([r]) => r < minS)) return 'above';
+  // Any anchor below solids → floor-standing (some items have decorative
+  // mounting anchors above solids AND a floor anchor below - Coffin, etc.)
+  if (anc.some(([r]) => r > maxS)) return 'below';
   return 'none';
 };
 

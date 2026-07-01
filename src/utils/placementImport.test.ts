@@ -107,6 +107,19 @@ describe('applyRoomPlacements', () => {
     expect(valid(p.row, p.col)).toBe(true);
   });
 
+  it('correctly places a mixed-direction item (Coffin) on the floor', () => {
+    // Coffin has anchors both above (rows 0-1, col 0) and below (row 4, col 2)
+    // its solids — anchorDir must return 'below' not 'none'
+    const coffin = mkItem('coffin', [[4,2,2,1],[4,2,2,2],[1,2,2,2],[1,1,2,2],[1,1,4,1]]);
+    const byIdWithCoffin = new Map([...byId, [coffin.id, coffin]]);
+    const out = applyRoomPlacements(0, [
+      pl('coffin', 5, 6, 1),  // at floor y=-11
+    ], byIdWithCoffin);
+    // bottom solid must be the floor row (6); shape solids span rows 0-3
+    expect(out[0].col).toBe(4);  // col0 = 5 - minC(1) = 4
+    expect(out[0].row).toBe(3);  // row0 = 6 - maxR(3) = 3
+  });
+
   it('snaps a trinket carrying its supporter cell coordinates on top', () => {
     const out = applyRoomPlacements(0, [
       pl('box', 4, 6, 1),

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { FurnitureItem, PlacedFurniture, StatKey } from '../types/furniture';
 import { getRoomConfig, isAtticCellValid, ATTIC_INDEX } from '../types/furniture';
 import { statScore, autoPopulateRoom, autoPopulateRoomAsync, pushScore, isConverged, preAllocateItems } from './autoPopulate';
+import { autoPopulateRoomV2 } from './autoPopulateV2';
 
 function makeItem(over: Partial<FurnitureItem> & { name: string }): FurnitureItem {
   const shape = over.shape ?? [[2]];
@@ -691,3 +692,127 @@ describe('autoPopulateRoom', () => {
     });
   });
 }); // end describe('autoPopulateRoom')
+
+// ─── V2 algorithm: duplicate-item prevention ──────────────────────────
+
+describe('autoPopulateRoomV2 (maximize-v2)', () => {
+  function makeOptsV2(over: Partial<Parameters<typeof autoPopulateRoomV2>[0]>) {
+    let n = 0;
+    return {
+      weights: { comfort: 1, stimulation: 1 } as Partial<Record<StatKey, number>>,
+      roomIndex: 0,
+      allFurniture: [],
+      ownership: {},
+      usedInOtherRooms: {},
+      makeInstanceId: () => `t-${n++}`,
+      ...over,
+    };
+  }
+
+  it('never exceeds ownership counts across 10 random seeds', () => {
+    const sofa = makeItem({ name: 'sofa', comfort: 9, shape: [[2, 2]] });
+    const toy = makeItem({ name: 'toy', comfort: 2, shape: [[2]] });
+
+    for (let seed = 0; seed < 10; seed++) {
+      const result = autoPopulateRoomV2({
+        weights: { comfort: 1, stimulation: 1 },
+        roomIndex: 0,
+        allFurniture: [sofa, toy],
+        ownership: { sofa: 1, toy: 200 },
+        usedInOtherRooms: {},
+        makeInstanceId: () => `t-${seed}-${Math.random()}`,
+        seed,
+        iterations: 3,
+      });
+
+      const counts: Record<string, number> = {};
+      for (const p of result) counts[p.item.id] = (counts[p.item.id] || 0) + 1;
+
+      expect(counts['sofa']).toBeLessThanOrEqual(1);
+      expect(counts['toy']).toBeLessThanOrEqual(200);
+    }
+  });
+
+  it('never exceeds ownership with complex shapes across 8 seeds', () => {
+    const lpiece = makeItem({ name: 'lpiece', comfort: 7, shape: [[2, 1], [2, 1], [2, 2]] });
+    const rare = makeItem({ name: 'rare', comfort: 20, shape: [[2, 2], [2, 2]] });
+    const dot = makeItem({ name: 'dot', comfort: 1, shape: [[2]] });
+
+    for (let seed = 0; seed < 8; seed++) {
+      const result = autoPopulateRoomV2({
+        weights: { comfort: 1, stimulation: 1 },
+        roomIndex: 0,
+        allFurniture: [lpiece, rare, dot],
+        ownership: { lpiece: 3, rare: 1, dot: 300 },
+        usedInOtherRooms: {},
+        makeInstanceId: () => `t-${seed}-${Math.random()}`,
+        seed,
+        iterations: 3,
+      });
+
+      const counts: Record<string, number> = {};
+      for (const p of result) counts[p.item.id] = (counts[p.item.id] || 0) + 1;
+
+      expect(counts['lpiece'] || 0).toBeLessThanOrEqual(3);
+      expect(counts['rare'] || 0).toBeLessThanOrEqual(1);
+      expect(counts['dot'] || 0).toBeLessThanOrEqual(300);
+    }
+  });
+
+  it('never exceeds ownership across multiple rooms (usedInOtherRooms)', () => {
+    const sofa = makeItem({ name: 'sofa', comfort: 9, shape: [[2, 2], [2, 2]] });
+    const toy = makeItem({ name: 'toy', comfort: 2, shape: [[2]] });
+
+    for (let seed = 0; seed < 8; seed++) {
+      const room0 = autoPopulateRoomV2({
+        roomIndex: 0,
+        weights: { comfort: 1, stimulation: 1 },
+        allFurniture: [sofa, toy],
+        ownership: { sofa: 1, toy: 300 },
+        usedInOtherRooms: {},
+        makeInstanceId: () => `t-${seed}-a-${Math.random()}`,
+        seed,
+        iterations: 3,
+      });
+
+      const room1 = autoPopulateRoomV2({
+        roomIndex: 1,
+        weights: { comfort: 1, stimulation: 1 },
+        allFurniture: [sofa, toy],
+        ownership: { sofa: 1, toy: 300 },
+        usedInOtherRooms: { sofa: 1 },
+        makeInstanceId: () => `t-${seed}-b-${Math.random()}`,
+        seed: seed + 1000,
+        iterations: 3,
+      });
+
+      const counts: Record<string, number> = {};
+      for (const p of room0) counts[p.item.id] = (counts[p.item.id] || 0) + 1;
+      for (const p of room1) counts[p.item.id] = (counts[p.item.id] || 0) + 1;
+
+      expect(counts['sofa']).toBeLessThanOrEqual(1);
+      expect(counts['toy']).toBeLessThanOrEqual(300);
+    }
+  });
+
+  it('maximize-v2 does not place duplicate when extraPresent is used (ruin-and-recreate)', () => {
+    const big = makeItem({ name: 'big', comfort: 5, shape: [[2]] });
+    const rare = makeItem({ name: 'rare', comfort: 20, shape: [[2]] });
+
+    for (let seed = 0; seed < 10; seed++) {
+      const result = autoPopulateRoomV2({
+        weights: { comfort: 1, stimulation: 1 },
+        roomIndex: 0,
+        allFurniture: [big, rare],
+        ownership: { big: 200, rare: 1 },
+        usedInOtherRooms: {},
+        makeInstanceId: () => `t-${seed}-${Math.random()}`,
+        seed,
+        iterations: 3,
+      });
+
+      const rareCount = result.filter(p => p.item.id === 'rare').length;
+      expect(rareCount).toBeLessThanOrEqual(1);
+    }
+  });
+});
